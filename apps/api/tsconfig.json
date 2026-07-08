@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@framework/db": ["../../packages/db/src/index.ts"],
+      "@framework/db/*": ["../../packages/db/src/*"]
+    }
+  },
+  "include": ["src/**/*", "scripts/**/*"]
+}

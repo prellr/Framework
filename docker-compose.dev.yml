@@ -1,0 +1,45 @@
+name: framework
+
+# Development overrides: hot reload, exposed ports, no nginx needed.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# (Or skip Docker for api/web entirely and just run postgres + redis here.)
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      target: deps
+    command: ["pnpm", "--filter", "@framework/api", "dev"]
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - /app/packages/db/node_modules
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+
+  worker:
+    build:
+      target: deps
+    command: ["pnpm", "--filter", "@framework/api", "worker:dev"]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - /app/packages/db/node_modules
+    environment:
+      NODE_ENV: development
+
+  # In dev, web is served by Vite directly — nginx not needed
+  nginx:
+    profiles:
+      - production

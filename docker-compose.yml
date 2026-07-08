@@ -1,0 +1,112 @@
+name: framework
+
+x-common: &common
+  restart: unless-stopped
+
+services:
+  postgres:
+    <<: *common
+    # pgvector/pgvector:pg17 = Postgres 17 with the vector extension built in.
+    # Drop-in for postgres:17 if you never use embeddings.
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # No LAN port mapping — reachable only over the docker network. Use
+    # `docker compose exec postgres psql ...` for any ops access.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    <<: *common
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    # No LAN port mapping — reachable only over the docker network.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    <<: *common
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD}@postgres:5432/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  api:
+    <<: *common
+    build:
+      context: .
+      target: api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD}@postgres:5432/app
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      AGENT_API_KEY: ${AGENT_API_KEY}
+      # New env vars must be added BOTH here and to the server's .env file.
+      # Values are injected at container startup, not baked into the image.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    <<: *common
+    build:
+      context: .
+      target: worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD}@postgres:5432/app
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  nginx:
+    <<: *common
+    build:
+      context: .
+      target: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

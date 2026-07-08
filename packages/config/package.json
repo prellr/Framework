@@ -1,0 +1,11 @@
+{
+  "name": "@framework/config",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./prettier": "./prettier.config.js",
+    "./eslint": "./eslint.config.js",
+    "./tsconfig": "./tsconfig.base.json"
+  }
+}
