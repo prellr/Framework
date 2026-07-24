@@ -1,0 +1,1 @@
+ALTER TABLE "jester_credential" ADD COLUMN "hl_wallet" text;

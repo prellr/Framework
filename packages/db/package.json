@@ -15,6 +15,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@alchemy/research-protocol": "workspace:*",
     "drizzle-orm": "^0.41.0",
     "pg": "^8.13.1"
   },

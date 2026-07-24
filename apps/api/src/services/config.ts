@@ -14,6 +14,15 @@
 
 import { db, appSettings } from "@framework/db";
 import { eq } from "drizzle-orm";
+import { isSealed, openFromString, sealToString } from "./crypto.ts";
+
+/**
+ * Credential-style settings are ENCRYPTED AT REST in app_settings (AES-256-GCM). JESTER_MASTER_KEY
+ * is excluded by definition — it's the key that protects the others, so it lives in the environment
+ * only and must never be written to the table it secures.
+ */
+const SECRET_RE = /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL/i;
+export const isSecretSetting = (key: string) => key !== "JESTER_MASTER_KEY" && SECRET_RE.test(key);
 
 export async function getSetting(key: string): Promise<string | undefined> {
   try {
@@ -22,7 +31,9 @@ export async function getSetting(key: string): Promise<string | undefined> {
       .from(appSettings)
       .where(eq(appSettings.key, key))
       .limit(1);
-    if (rows[0]?.value) return rows[0].value;
+    const raw = rows[0]?.value;
+    // Legacy plaintext rows still resolve, so this is backward compatible until they're re-sealed.
+    if (raw) return isSealed(raw) ? await openFromString(raw) : raw;
   } catch {
     // DB unavailable during startup or migration — fall through to env
   }
@@ -34,11 +45,13 @@ export async function getSetting(key: string): Promise<string | undefined> {
  * sync cursors that jobs read and write between runs.
  */
 export async function setSetting(key: string, value: string): Promise<void> {
+  // Secrets are sealed before they ever touch the database.
+  const stored = isSecretSetting(key) ? await sealToString(value) : value;
   await db
     .insert(appSettings)
-    .values({ key, value })
+    .values({ key, value: stored })
     .onConflictDoUpdate({
       target: appSettings.key,
-      set: { value, updatedAt: new Date() },
+      set: { value: stored, updatedAt: new Date() },
     });
 }

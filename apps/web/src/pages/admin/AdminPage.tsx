@@ -8,11 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
+import { TZ_OPTIONS, VIEWER_TZ, tzLabel, effectiveTz } from "@/lib/tz";
 
 const ROLES = ["viewer", "operator", "manager", "admin"] as const;
 type RoleOption = (typeof ROLES)[number];
 
-export function AdminPage() {
+export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
   const [tab, setTab] = useState<"users" | "settings">("users");
 
   return (
@@ -207,6 +208,52 @@ function UsersTab() {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
+/** Per-user display timezone — drives calendar-day bucketing (the API container runs in UTC). */
+function TimezoneCard() {
+  const utils = trpc.useUtils();
+  const me = trpc.admin.me.useQuery();
+  const current = effectiveTz((me.data as any)?.timezone);
+  const saved = (me.data as any)?.timezone as string | null | undefined;
+  const [tz, setTz] = useState<string | null>(null);
+  const value = tz ?? current;
+  const save = trpc.admin.setTimezone.useMutation({ onSuccess: () => utils.admin.me.invalidate() });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Your timezone</CardTitle>
+        <CardDescription>
+          Day-based views (daily win rate, per-day rollups) are bucketed in this zone. The server runs in
+          UTC, so without this a late-evening session would land on the wrong calendar day.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={value}
+            onChange={(e) => setTz(e.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+          >
+            {TZ_OPTIONS.map((z) => (
+              <option key={z} value={z}>
+                {z} ({tzLabel(z)})
+              </option>
+            ))}
+          </select>
+          <Button disabled={save.isPending || value === saved} onClick={() => save.mutate({ timezone: value })}>
+            <Save className="mr-2 h-4 w-4" />
+            {save.isPending ? "Saving…" : "Save"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {saved ? `Saved: ${saved}` : `Not set — using this browser's zone (${VIEWER_TZ})`}
+          </span>
+        </div>
+        {save.error && <p className="text-sm text-destructive">{save.error.message}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function SettingsTab() {
   const utils = trpc.useUtils();
   const settings = trpc.admin.settings.useQuery();
@@ -223,6 +270,8 @@ function SettingsTab() {
 
   return (
     <div className="space-y-6">
+      <TimezoneCard />
+
       {settings.data?.groups.map((group) => (
         <Card key={group.id}>
           <CardHeader>
@@ -239,13 +288,29 @@ function SettingsTab() {
                   <Badge variant={v.set ? "success" : "secondary"}>
                     {v.set ? "set" : "not set"}
                   </Badge>
+                  {(v as any).secret && (v as any).preview && (
+                    <span className="font-mono text-xs text-muted-foreground" title="Value is hidden — enter a new one to replace it">
+                      {(v as any).preview}
+                    </span>
+                  )}
                 </div>
                 <Input
                   id={v.name}
+                  type={(v as any).secret ? "password" : "text"}
+                  autoComplete="off"
                   value={edits[v.name] ?? v.value ?? ""}
-                  placeholder="(empty — falls back to env var)"
+                  placeholder={
+                    (v as any).secret && v.set
+                      ? "Hidden — type a new value to replace it"
+                      : "(empty — falls back to env var)"
+                  }
                   onChange={(e) => setEdits((prev) => ({ ...prev, [v.name]: e.target.value }))}
                 />
+                {(v as any).secret && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Stored value is never sent to the browser. Leave blank to keep it unchanged.
+                  </p>
+                )}
               </div>
             ))}
           </CardContent>

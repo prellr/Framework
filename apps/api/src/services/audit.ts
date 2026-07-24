@@ -17,7 +17,9 @@ export async function audit(
 ): Promise<void> {
   try {
     await db.insert(auditLogs).values({
-      userId: ctx.user?.id ?? null,
+      // API-key/MCP requests use a synthetic `agent` principal that intentionally has no row in
+      // the human user table. Preserve the action/resource audit record without violating the FK.
+      userId: ctx.user?.id === "agent" ? null : ctx.user?.id ?? null,
       action,
       resourceType: detail.resourceType ?? null,
       resourceId: detail.resourceId ?? null,

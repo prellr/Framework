@@ -1,0 +1,331 @@
+<title>Up/Down Research Register</title>
+<style>
+  :root{
+    --bg:#F7F8FA; --surface:#FFFFFF; --ink:#14181F; --muted:#5A6472; --faint:#8B95A3;
+    --line:#DCE2EA; --line-soft:#E8ECF2; --accent:#0E7C86; --accent-soft:#0E7C8618;
+    --ok:#1F6F52; --warn:#8A5D0C; --bad:#A3332F; --idle:#5A6472;
+    --ok-bg:#1F6F5214; --warn-bg:#8A5D0C14; --bad-bg:#A3332F14; --idle-bg:#5A647214;
+    --serif:ui-serif,Georgia,"Iowan Old Style","Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0D1117; --surface:#141A22; --ink:#E6EAF0; --muted:#98A3B2; --faint:#6E7A8A;
+      --line:#232B36; --line-soft:#1C232D; --accent:#3BB7C0; --accent-soft:#3BB7C01F;
+      --ok:#54C08C; --warn:#D9A441; --bad:#E5776F; --idle:#98A3B2;
+      --ok-bg:#54C08C1A; --warn-bg:#D9A4411A; --bad-bg:#E5776F1A; --idle-bg:#98A3B21A;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D1117; --surface:#141A22; --ink:#E6EAF0; --muted:#98A3B2; --faint:#6E7A8A;
+    --line:#232B36; --line-soft:#1C232D; --accent:#3BB7C0; --accent-soft:#3BB7C01F;
+    --ok:#54C08C; --warn:#D9A441; --bad:#E5776F; --idle:#98A3B2;
+    --ok-bg:#54C08C1A; --warn-bg:#D9A4411A; --bad-bg:#E5776F1A; --idle-bg:#98A3B21A;
+  }
+  :root[data-theme="light"]{
+    --bg:#F7F8FA; --surface:#FFFFFF; --ink:#14181F; --muted:#5A6472; --faint:#8B95A3;
+    --line:#DCE2EA; --line-soft:#E8ECF2; --accent:#0E7C86; --accent-soft:#0E7C8618;
+    --ok:#1F6F52; --warn:#8A5D0C; --bad:#A3332F; --idle:#5A6472;
+    --ok-bg:#1F6F5214; --warn-bg:#8A5D0C14; --bad-bg:#A3332F14; --idle-bg:#5A647214;
+  }
+
+  .reg{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    padding:clamp(1.5rem,5vw,4.5rem) clamp(1.1rem,5vw,2rem);}
+  .wrap{max-width:60rem;margin:0 auto;display:flex;flex-direction:column;gap:3.25rem;}
+  .reg *{box-sizing:border-box;}
+
+  .eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(2rem,5.5vw,3.15rem);line-height:1.08;
+    letter-spacing:-.015em;margin:.5rem 0 0;text-wrap:balance;}
+  .lede{font-size:clamp(1rem,2.2vw,1.13rem);color:var(--muted);max-width:60ch;margin:.9rem 0 0;}
+  .meta{font-family:var(--mono);font-size:.72rem;color:var(--faint);margin-top:1.4rem;
+    display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;border-top:1px solid var(--line);padding-top:.9rem;}
+
+  .tally{display:flex;flex-wrap:wrap;gap:.5rem;}
+  .chip{font-family:var(--mono);font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;
+    padding:.3rem .55rem;border:1px solid var(--line);color:var(--muted);white-space:nowrap;}
+  .chip b{font-weight:600;color:var(--ink);}
+  .s-ok{color:var(--ok);background:var(--ok-bg);border-color:transparent;}
+  .s-warn{color:var(--warn);background:var(--warn-bg);border-color:transparent;}
+  .s-bad{color:var(--bad);background:var(--bad-bg);border-color:transparent;}
+  .s-idle{color:var(--idle);background:var(--idle-bg);border-color:transparent;}
+
+  section{display:flex;flex-direction:column;gap:1rem;}
+  h2{font-family:var(--mono);font-size:.74rem;letter-spacing:.15em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;margin:0;padding-bottom:.55rem;border-bottom:1px solid var(--accent);}
+
+  .fig{background:var(--surface);border:1px solid var(--line);padding:clamp(1rem,3vw,1.7rem);
+    display:flex;flex-direction:column;gap:.85rem;}
+  .fig figcaption{font-size:.85rem;color:var(--muted);max-width:62ch;}
+  .fig svg{width:100%;height:auto;display:block;}
+  .legend{font-family:var(--mono);font-size:.7rem;color:var(--faint);display:flex;flex-wrap:wrap;gap:.35rem 1.2rem;}
+
+  .entry{border-top:1px solid var(--line);padding-top:1.35rem;display:flex;flex-direction:column;gap:.6rem;}
+  .entry:first-of-type{border-top:none;padding-top:0;}
+  .entry-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.6rem;}
+  .entry h3{font-family:var(--serif);font-size:1.32rem;font-weight:600;letter-spacing:-.01em;margin:0;
+    line-height:1.25;text-wrap:balance;}
+  .entry p{margin:0;max-width:68ch;}
+  .entry p+p{margin-top:.55rem;}
+  .readout{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:clamp(1.15rem,3vw,1.5rem);
+    color:var(--ink);letter-spacing:-.01em;padding:.55rem 0;border-left:2px solid var(--accent);
+    padding-left:.85rem;}
+  .readout small{display:block;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);margin-top:.3rem;}
+  .arrow{color:var(--accent);}
+  .tbl-scroll{overflow-x:auto;}
+  table{border-collapse:collapse;width:100%;min-width:26rem;font-family:var(--mono);
+    font-variant-numeric:tabular-nums;font-size:.79rem;}
+  th{text-align:left;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;
+    font-size:.66rem;padding:.4rem .7rem .4rem 0;border-bottom:1px solid var(--line);}
+  td{padding:.36rem .7rem .36rem 0;border-bottom:1px solid var(--line-soft);color:var(--muted);}
+  td.name{color:var(--ink);}
+  td.pos{color:var(--ok);} td.neg{color:var(--bad);}
+  .note{font-size:.85rem;color:var(--muted);border-left:2px solid var(--line);padding-left:.85rem;max-width:66ch;}
+  .close{border-top:1px solid var(--line);padding-top:1.6rem;font-size:.92rem;color:var(--muted);max-width:66ch;}
+  .close strong{color:var(--ink);font-weight:600;}
+  a{color:var(--accent);}
+  a:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  @media (prefers-reduced-motion:no-preference){
+    .dot{transition:r .2s ease;}
+  }
+</style>
+
+<div class="reg">
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Polymarket Up/Down · Research Register</div>
+    <h1>What we actually learned</h1>
+    <p class="lede">A running record of findings from the crypto Up/Down prediction-market study — including the negative results, the measurement artifact, and the one conclusion we had to retract. Every entry carries its epistemic status, because the status is the finding.</p>
+    <div class="meta">
+      <span>Updated 2026-07-24</span><span>33 strategies under forward evaluation</span><span>57 frozen strategy × timeframe hypotheses</span><span>Paper only — no execution path exists</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Figure 1 — the baseline was in the wrong place</h2>
+    <figure class="fig">
+      <svg viewBox="0 0 100 34" role="img" aria-label="Strip plot of 28 strategy win rates measured under a symmetric bracket, clustered near 40 percent while the assumed baseline was 50 percent.">
+        <!-- axis -->
+        <line x1="2" y1="27" x2="98" y2="27" stroke="var(--line)" stroke-width="0.25"/>
+        <!-- assumed 50% -->
+        <line x1="82" y1="4" x2="82" y2="27" stroke="var(--bad)" stroke-width="0.4" stroke-dasharray="1.2 1"/>
+        <text x="82" y="2.6" font-family="ui-monospace,monospace" font-size="2.1" fill="var(--bad)" text-anchor="middle">assumed 50%</text>
+        <!-- observed median 40.3% -->
+        <line x1="60.6" y1="4" x2="60.6" y2="27" stroke="var(--accent)" stroke-width="0.5"/>
+        <text x="60.6" y="2.6" font-family="ui-monospace,monospace" font-size="2.1" fill="var(--accent)" text-anchor="middle">actual median 40.3%</text>
+        <!-- ticks -->
+        <g font-family="ui-monospace,monospace" font-size="2" fill="var(--faint)" text-anchor="middle">
+          <text x="4" y="31">15%</text><text x="27" y="31">25%</text><text x="50" y="31">35%</text>
+          <text x="73" y="31">45%</text><text x="96" y="31">55%</text>
+        </g>
+        <!-- dots: x = (wr-13)/(58-13)*96+2 ; r scaled by log(n) -->
+        <g class="dots" fill="var(--muted)" fill-opacity="0.85">
+          <circle class="dot" cx="12.0" cy="22.5" r="1.15"/><!-- ema_cloud 17.7 -->
+          <circle class="dot" cx="22.2" cy="17.0" r="1.9"/><!-- trade_planner 22.5 -->
+          <circle class="dot" cx="35.0" cy="23.0" r="0.95"/><!-- holy_grail 28.9 -->
+          <circle class="dot" cx="36.1" cy="19.6" r="0.85"/><!-- rel_vol_shock 29.4 -->
+          <circle class="dot" cx="36.7" cy="15.4" r="1.05"/><!-- mean_rev_pocket 29.7 -->
+          <circle class="dot" cx="36.7" cy="24.6" r="0.9"/><!-- delta_absorption 29.7 -->
+          <circle class="dot" cx="42.4" cy="20.4" r="1.0"/><!-- vwap_third 31.9 -->
+          <circle class="dot" cx="48.8" cy="16.0" r="0.95"/><!-- elliott 34.9 -->
+          <circle class="dot" cx="49.3" cy="23.4" r="0.9"/><!-- ib_or 35.1 -->
+          <circle class="dot" cx="51.0" cy="19.2" r="1.1"/><!-- wyckoff 35.9 -->
+          <circle class="dot" cx="55.0" cy="13.8" r="1.05"/><!-- jester_v1 37.8 -->
+          <circle class="dot" cx="56.3" cy="21.8" r="1.0"/><!-- imi_vwap 38.4 -->
+          <circle class="dot" cx="59.5" cy="17.4" r="1.35"/><!-- rsi 39.9 -->
+          <circle class="dot" cx="59.9" cy="24.2" r="1.25"/><!-- vortex_donchian 40.1 -->
+          <circle class="dot" cx="60.8" cy="20.0" r="1.05"/><!-- crt_tbs 40.5 -->
+          <circle class="dot" cx="63.2" cy="15.0" r="1.35"/><!-- laguerre 41.6 -->
+          <circle class="dot" cx="65.3" cy="22.6" r="1.2"/><!-- bb_cci 42.6 -->
+          <circle class="dot" cx="67.2" cy="18.2" r="1.2"/><!-- kalman_trend 43.5 -->
+          <circle class="dot" cx="68.3" cy="24.8" r="1.0"/><!-- darvas 44.0 -->
+          <circle class="dot" cx="72.8" cy="16.6" r="0.95"/><!-- qstick 46.1 -->
+          <circle class="dot" cx="75.0" cy="21.2" r="0.85"/><!-- kalman_z 47.1 -->
+          <circle class="dot" cx="80.5" cy="14.4" r="1.3"/><!-- multi_tf 49.8 -->
+          <circle class="dot" cx="82.2" cy="23.8" r="1.15"/><!-- fisher 50.6 -->
+          <circle class="dot" cx="83.5" cy="18.8" r="1.4"/><!-- mass_index 51.2 -->
+          <circle class="dot" cx="84.8" cy="22.0" r="1.05"/><!-- nvi_pvi 51.8 -->
+          <circle class="dot" cx="86.5" cy="16.2" r="0.95"/><!-- funding_adj 52.6 -->
+        </g>
+        <g fill="var(--accent)" fill-opacity="0.95">
+          <circle class="dot" cx="89.5" cy="20.6" r="1.2"/><!-- vsa 54.0 -->
+          <circle class="dot" cx="96.0" cy="13.2" r="1.0"/><!-- ichimoku 57.0 -->
+        </g>
+      </svg>
+      <div class="legend">
+        <span>● one strategy · radius ∝ trade count</span>
+        <span style="color:var(--accent)">● above the observed centre</span>
+      </div>
+      <figcaption>28 Jester strategies measured on a forced symmetric ±1×ATR bracket, where a random entry should win exactly 50%. Twenty-four landed below it. A distribution that sits ten points off its theoretical baseline is a bent ruler, not twenty-four independently bad strategies.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Method correction</h2>
+
+    <article class="entry">
+      <div class="entry-head">
+        <span class="chip s-warn">Strongly supported</span>
+        <span class="eyebrow">mechanism unconfirmed</span>
+      </div>
+      <h3>The symmetric-bracket baseline is ~40%, not 50%</h3>
+      <div class="readout">24 / 28 strategies below 50% &nbsp;<span class="arrow">·</span>&nbsp; median 40.3%
+        <small>n ≥ 20 trades each · BTC / ETH / SOL · 30 days</small></div>
+      <p>The method forces stop and target to equal distance so that a coin-flip entry scores 50%, making win rate a clean read on whether a strategy's <em>entries</em> carry direction. Run on one strategy it looked sound. Run on twenty-eight it collapsed: almost everything sits near 40%.</p>
+      <p>The likely mechanism is ordinary and boring — when a five-minute bar's range touches both the stop and the target, the backtest resolves it as the stop, a standard conservative convention. At intraday volatility that happens constantly, dragging every measurement down by about ten points.</p>
+      <p class="note">Consequence: absolute distance from 50% means nothing here. Only a strategy's position <em>relative to the observed centre</em> carries information — and that ranking is unchanged whether the shift is an engine convention or a real property of the catalogue.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>Retraction</h2>
+
+    <article class="entry">
+      <div class="entry-head">
+        <span class="chip s-bad">Retracted</span>
+        <span class="eyebrow">previously reported as a measured edge</span>
+      </div>
+      <h3>Jester V1's entries are not counter-informative</h3>
+      <div class="readout">37.8% <span class="arrow">vs</span> 40.3% median &nbsp;<span class="arrow">·</span>&nbsp; ordinary
+        <small>was reported as ~3.2σ below a 50% baseline</small></div>
+      <p>Measured against the assumed 50% baseline, V1 looked meaningfully counter-informative and became the rationale for two live bots that fade it. Measured against the real centre, it is two and a half points below median — unremarkable.</p>
+      <p>The single-strategy probe could not have caught this; only running the screen at scale exposed it. The two bots stay registered and will be judged on forward evidence, which is the point of pre-registration — but the 3.2σ figure should not be cited again, including in the agent handoff document where it still appears.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>Negative results</h2>
+
+    <article class="entry">
+      <div class="entry-head">
+        <span class="chip s-ok">Replicated</span>
+        <span class="eyebrow">two timeframes · cross-family control</span>
+      </div>
+      <h3>Combining strategies does not raise the hit rate</h3>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Ensemble</th><th>Markets</th><th>Win rate</th><th>vs individuals</th></tr></thead>
+          <tbody>
+            <tr><td class="name">SOL 5m · best-3, 2-of-3 agree</td><td>37</td><td class="neg">38%</td><td class="neg">46% → 38%</td></tr>
+            <tr><td class="name">SOL 15m · best-5, 3-of-5 agree</td><td>16</td><td class="pos">69%</td><td class="pos">54% → 69%</td></tr>
+            <tr><td class="name">SOL 15m · one per family, 3-of-5</td><td>11</td><td class="neg">36%</td><td class="neg">46% → 36%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The middle row is the trap. Agreement among the top five looked like a large gain — until you notice the top five were three variants of the same fade signal. Force genuine diversity, one strategy per family, and the gain inverts.</p>
+      <p class="note">Every apparent confluence gain traced to correlation, not confirmation. Our strategies do not carry independent directional information for agreement to compound. That makes more <em>independent</em> signals the prerequisite, not more voting logic.</p>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head">
+        <span class="chip s-ok">Measured</span>
+        <span class="eyebrow">617 resolved markets</span>
+      </div>
+      <h3>These markets open efficiently — there is no favourite to fade</h3>
+      <div class="readout">implied price 0.46 – 0.55 &nbsp;<span class="arrow">·</span>&nbsp; median 0.51
+        <small>window-start prices across every scored market</small></div>
+      <p>The published favourite-longshot bias — a true coin flip trading near 0.57 — is real in the literature but competed away by volume, and these markets are liquid. At the moment we decide, prices sit on the coin flip. There is no mispriced favourite at entry, so that entire family of edge is unavailable to us and we stopped pursuing it.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>Corrected instrumentation</h2>
+
+    <article class="entry">
+      <div class="entry-head"><span class="chip s-ok">Fixed &amp; verified</span></div>
+      <h3>We were pricing against the wrong reference</h3>
+      <div class="readout">Chainlink <span class="arrow">·</span> not Hyperliquid
+        <small>the market's own text: "not according to other sources or spot markets"</small></div>
+      <p>These contracts settle on a Chainlink data stream. Our fair-value model measured distance-to-strike on a different exchange's price — a gap that is negligible at the open and widest near expiry, which is exactly where the model claims its edge. The pricer now reads the settlement feed directly at one tick per second, and falls back cleanly rather than mixing the two sources.</p>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><span class="chip s-ok">Fixed &amp; verified</span></div>
+      <h3>Cheap prices with no depth behind them were inflating results</h3>
+      <div class="readout">DOGE 0.030 <span class="arrow">→</span> 0.055 actual
+        <small>real cost of a $5 order, walking the book</small></div>
+      <p>Paper trades were filling at the best quoted price regardless of whether any size existed there. On thin books that is fiction: the quote above cost 83% more once the order walked real depth. Every strategy now pays the true walked price, and skips markets too thin to fill at all. Deep books are unaffected.</p>
+      <p class="note">This one matters retroactively — the asset leaderboard's top performers were concentrated in exactly the thin markets this flattered. Results from before the fix should be read with suspicion.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>Exploratory · not conclusions</h2>
+
+    <article class="entry">
+      <div class="entry-head">
+        <span class="chip s-warn">In-sample</span>
+        <span class="eyebrow">ranked against the observed centre</span>
+      </div>
+      <h3>Candidate signals from the catalogue screen</h3>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Strategy</th><th>TF</th><th>Trades</th><th>Win rate</th><th>vs centre</th></tr></thead>
+          <tbody>
+            <tr><td class="name">ichimoku_kijun_bounce_continuation</td><td>15m</td><td>79</td><td class="pos">57.0%</td><td class="pos">+16.7</td></tr>
+            <tr><td class="name">vsa_volume_spread</td><td>15m</td><td>187</td><td class="pos">54.0%</td><td class="pos">+13.7</td></tr>
+            <tr><td class="name">mass_index_reversal</td><td>15m</td><td>868</td><td class="pos">51.2%</td><td class="pos">+10.9</td></tr>
+            <tr><td class="name">trade_planner</td><td>5m</td><td>8732</td><td class="neg">22.5%</td><td class="neg">−17.8</td></tr>
+            <tr><td class="name">ema_cloud_range_shift_rsi</td><td>15m</td><td>237</td><td class="neg">17.7%</td><td class="neg">−22.6</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>These are the tails of the distribution in Figure 1, and nothing more. They were selected by looking at the same data that would judge them, which is the exact failure the study is built to avoid. Any of them becomes real only by being registered as a hypothesis first and evaluated on data that arrives afterwards.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>External priors · prospectively isolated</h2>
+
+    <article class="entry">
+      <div class="entry-head">
+        <span class="chip s-warn">Preregistered</span>
+        <span class="eyebrow">external screenshot · no Jester outcome used</span>
+      </div>
+      <h3>Cobra repeatedly selects the UK-night 5m session</h3>
+      <div class="readout">night 23–07 <span class="arrow">·</span> 5m <span class="arrow">·</span> repeated across source bots
+        <small>Cobra Capital Inc v1.9.2 · user-supplied 2026-07-24 screenshot</small></div>
+      <p>The screenshot shows several differently tuned source bots starring the same <code>night23-07 5m</code> bucket. It also exposes bot-specific “bull factors,” but neither the hidden model nor the selection process is reproducible. The factors and starred source results therefore receive no evidentiary weight.</p>
+      <p>One narrow Jester child was registered before a fresh boundary: the existing bootstrap-MC price, unchanged, on 5m markets only during Europe/London 23:00–07:00. It reuses the parent draw and paired-book fetch, adds no polling or model load, and owns an independent paper identity.</p>
+      <p class="note">The same screenshot’s tick-soak, no-tick, no-ask, fill-rate, latency, and rail fields are operational priors. They support telemetry and abstention diagnostics, not a direction signal.</p>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head">
+        <span class="chip s-ok">Method registered</span>
+        <span class="eyebrow">multiple-testing correction</span>
+      </div>
+      <h3>The expanded roster now has one frozen familywise gate</h3>
+      <div class="readout">57 hypotheses <span class="arrow">·</span> Holm α = 0.05
+        <small>strategy × timeframe units · unready rows remain in-family as p=1</small></div>
+      <p>Adding strategies without correcting the promotion threshold makes a lucky pass more likely. The new cohort keeps every existing coverage, span, bet, session, effect-size, and cluster-bootstrap requirement, then adds a one-sided cluster-robust p-value and Holm correction across the complete frozen family.</p>
+      <p>Macro UP/DOWN rows retain their same-tick opposite-side comparator; every other row retains same-tick Always Down. A missing or later strategy cannot silently shrink the family. New hypotheses require a new frozen version.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>Open · blocked</h2>
+
+    <article class="entry">
+      <div class="entry-head"><span class="chip s-idle">Blocked</span></div>
+      <h3>Confirming the mechanism behind Figure 1</h3>
+      <p>Widening the bracket should shrink the artifact, since fewer bars would touch both levels — a decisive test of the stop-first explanation. It is stalled on two things: a shared container being redeployed under long-running jobs, and a self-inflicted cooldown described below. The practical reading does not depend on it.</p>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><span class="chip s-idle">Operational</span></div>
+      <h3>The backtest queue is not unmetered</h3>
+      <div class="readout">93 runs in ~5 min <span class="arrow">→</span> account-wide 403
+        <small>~2 hour cooldown · previously believed unlimited</small></div>
+      <p>A burst of screening calls tripped an account-level block on every endpoint, not just backtests — briefly starving the live signal loggers. It cleared on its own. Catalogue-scale work now runs sequentially with spacing, throttled only on genuine calls, and stops immediately on the first rejection.</p>
+    </article>
+  </section>
+
+  <p class="close"><strong>Why this register is mostly negative results.</strong> Four of the eight entries above are things that turned out not to be true, including one of our own published conclusions. That ratio is the honest output of a study designed around pre-registration and forward evaluation: the discipline's whole job is to convert appealing patterns into discarded hypotheses before anyone acts on them. The findings that survive that process are worth something precisely because so many did not.</p>
+
+</div>
+</div>

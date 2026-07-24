@@ -1,0 +1,1 @@
+ALTER TABLE "strategy" ADD COLUMN "default_param_code" text;

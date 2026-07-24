@@ -1,0 +1,37 @@
+CREATE TABLE "deribit_option_snapshot" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"currency" text NOT NULL,
+	"pair" text NOT NULL,
+	"sample_bucket" timestamp NOT NULL,
+	"captured_at" timestamp DEFAULT now() NOT NULL,
+	"expiration_at" timestamp NOT NULL,
+	"time_to_expiry_hours" double precision NOT NULL,
+	"underlying_price" double precision NOT NULL,
+	"interest_rate" double precision NOT NULL,
+	"call25_instrument" text NOT NULL,
+	"call25_strike" double precision NOT NULL,
+	"call25_delta_proxy" double precision NOT NULL,
+	"call25_mark_iv" double precision NOT NULL,
+	"call25_bid" double precision NOT NULL,
+	"call25_ask" double precision NOT NULL,
+	"call25_open_interest" double precision NOT NULL,
+	"put25_instrument" text NOT NULL,
+	"put25_strike" double precision NOT NULL,
+	"put25_delta_proxy" double precision NOT NULL,
+	"put25_mark_iv" double precision NOT NULL,
+	"put25_bid" double precision NOT NULL,
+	"put25_ask" double precision NOT NULL,
+	"put25_open_interest" double precision NOT NULL,
+	"rr25_vol_points" double precision NOT NULL,
+	"atm_strike" double precision,
+	"atm_mark_iv" double precision,
+	"call_open_interest" double precision NOT NULL,
+	"put_open_interest" double precision NOT NULL,
+	"put_call_oi_ratio" double precision,
+	"total_open_interest" double precision NOT NULL,
+	"option_count" integer NOT NULL,
+	"two_sided_count" integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX "deribit_option_currency_bucket_idx" ON "deribit_option_snapshot" USING btree ("currency","sample_bucket");--> statement-breakpoint
+CREATE INDEX "deribit_option_captured_at_idx" ON "deribit_option_snapshot" USING btree ("captured_at");

@@ -1,0 +1,1 @@
+ALTER TABLE "backtest_run" ADD COLUMN "jester_param_code" text;

@@ -1,0 +1,23 @@
+[project]
+name = "alchemy-research-worker"
+version = "0.1.0"
+description = "Language-neutral, paper-only research worker for Alchemy"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.0,<3",
+  "pyarrow>=18,<23",
+]
+
+[project.scripts]
+alchemy-build-dataset = "alchemy_research_worker.build_dataset:main"
+alchemy-research-worker = "alchemy_research_worker.worker:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.unittest]
+start-directory = "tests"

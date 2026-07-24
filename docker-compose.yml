@@ -1,4 +1,4 @@
-name: framework
+name: jester-analytics
 
 x-common: &common
   restart: unless-stopped
@@ -60,7 +60,10 @@ services:
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS}
       AGENT_API_KEY: ${AGENT_API_KEY}
+      # Master key for encrypting per-user Jester API keys (services/crypto.ts).
+      JESTER_MASTER_KEY: ${JESTER_MASTER_KEY}
       # New env vars must be added BOTH here and to the server's .env file.
       # Values are injected at container startup, not baked into the image.
     depends_on:
@@ -85,6 +88,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD}@postgres:5432/app
       REDIS_URL: redis://redis:6379
+      # The worker decrypts per-user keys in runCell — it needs the master key too.
+      JESTER_MASTER_KEY: ${JESTER_MASTER_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,11 +103,10 @@ services:
     build:
       context: .
       target: nginx
+    # Isolated from the existing homelab-framework nginx (which owns 80/443):
+    # serve on a free high host port. LAN-internal tool, no public TLS here.
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - "8090:80"
     depends_on:
       api:
         condition: service_healthy

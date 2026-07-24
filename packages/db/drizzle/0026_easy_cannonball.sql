@@ -1,0 +1,1 @@
+ALTER TABLE "paper_trade" ADD COLUMN "control_ask_paid" double precision;

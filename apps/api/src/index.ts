@@ -13,6 +13,8 @@ import { auth } from "./auth.ts";
 import { appRouter } from "./trpc/router.ts";
 import { createContext } from "./trpc/context.ts";
 import { createSseApp } from "./sse.ts";
+import { createMcpApp } from "./mcp/server.ts";
+import { createResearchWorkerApp } from "./research-worker-api.ts";
 
 const app = new Hono();
 
@@ -45,6 +47,12 @@ app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
 // ── SSE (real-time events via Redis pub/sub) ───────────────────────────────
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 app.route("/", createSseApp(redisUrl));
+
+// ── MCP server (agent access to the warehouse; analysis-only) ──────────────
+app.route("/", createMcpApp());
+
+// ── Research worker gateway (separate credential; paper-only leases) ────────
+app.route("/", createResearchWorkerApp());
 
 // ── tRPC ────────────────────────────────────────────────────────────────────
 app.use("/api/trpc/*", bodyLimit({ maxSize: 20 * 1024 * 1024 }));

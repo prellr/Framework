@@ -31,10 +31,13 @@ export const auth = betterAuth({
       console.log(`[auth] Password reset for ${user.name} (${user.email}): ${url}`);
     },
   },
+  // Trust the canonical URL plus any extra origins (comma-separated TRUSTED_ORIGINS) —
+  // e.g. the public domain AND the LAN IP, so the app works both ways.
   trustedOrigins: [
     "http://localhost:5173",
     "http://localhost:5174",
     process.env.BETTER_AUTH_URL ?? "http://localhost:3001",
+    ...(process.env.TRUSTED_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
   ],
   plugins: [
     admin({

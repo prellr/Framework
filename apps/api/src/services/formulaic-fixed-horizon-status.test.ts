@@ -1,0 +1,58 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { FORMULAIC_FIXED_HORIZON_POC } from "./formulaic-fixed-horizon-contract.ts";
+import { formulaLabStatus } from "./formulaic-fixed-horizon-status.ts";
+
+test("Formula Lab status exposes the complete deterministic trial universe", () => {
+  const status = formulaLabStatus();
+  assert.equal(status.version, FORMULAIC_FIXED_HORIZON_POC.version);
+  assert.equal(status.status, "synthetic-only");
+  assert.equal(status.system.version, "jester-formula-lab-v1");
+  assert.equal(status.sourceAdapters.length, 3);
+  assert.equal(status.targetAdapters.length, 3);
+  assert.ok(status.targetAdapters.some((adapter) => adapter.key === "hyperliquid-perp-paper"));
+  assert.ok(status.targetAdapters.some((adapter) => adapter.key === "polymarket-down-paper"));
+  assert.equal(status.candidates.length, 33);
+  assert.equal(new Set(status.candidates.map((candidate) => candidate.id)).size, 33);
+  assert.ok(status.candidates.every((candidate) => candidate.expression));
+  assert.ok(status.candidates.every((candidate) => candidate.depth >= 1));
+  assert.ok(status.candidates.every((candidate) => candidate.depth <= status.grammar.maximumDepth));
+  assert.equal(status.proof.candidatesEvaluated, 33);
+  assert.equal(status.proof.folds.length, 4);
+  assert.equal(status.proof.isMarketEvidence, false);
+});
+
+test("planted proof passes mechanics while remaining explicitly non-market evidence", () => {
+  const status = formulaLabStatus();
+  assert.equal(status.proof.aggregate.folds, 4);
+  assert.ok(status.proof.aggregate.trades > 0);
+  assert.equal(status.proof.aggregate.positiveFolds, 4);
+  assert.ok((status.proof.aggregate.tradeWeightedMeanNetBps ?? 0) > 0);
+  assert.ok(status.proof.folds.every((fold) =>
+    fold.trainLastLabelEndAtMs != null
+    && fold.trainLastLabelEndAtMs <= fold.testStartAtMs));
+  assert.match(status.proof.mode, /planted-signal synthetic/i);
+  assert.match(status.proof.disposition, /hypothesis.*new forward paper boundary/i);
+});
+
+test("Formula Lab status and router remain static, read-only, and non-executing", () => {
+  const source = readFileSync(
+    new URL("./formulaic-fixed-horizon-status.ts", import.meta.url),
+    "utf8",
+  );
+  const routerSource = readFileSync(
+    new URL("../routers/formula-lab.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /from\s+["'][^"']*(?:db|worker|paper-floor|crucible)/i);
+  assert.doesNotMatch(
+    source,
+    /venuePriceSnapshots|paperTrades|fetch\s*\(|placeOrder|privateKey/i,
+  );
+  assert.match(
+    routerSource,
+    /status:\s*protectedProcedure\.query\(\(\)\s*=>\s*formulaLabStatus\(\)\)/,
+  );
+  assert.doesNotMatch(routerSource, /\.(?:mutation|subscription)\s*\(/);
+});

@@ -3,6 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@alchemy/research-protocol": ["../../packages/research-protocol/src/index.ts"],
       "@framework/db": ["../../packages/db/src/index.ts"],
       "@framework/db/*": ["../../packages/db/src/*"]
     }

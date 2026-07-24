@@ -1,0 +1,12 @@
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_pair_chk" CHECK ("polymarket_trade_flow_event"."pair" in ('BTC-USD','ETH-USD','SOL-USD','XRP-USD','DOGE-USD','BNB-USD'));--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_horizon_chk" CHECK ("polymarket_trade_flow_event"."horizon_min" in (5,15));--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_outcome_side_chk" CHECK ("polymarket_trade_flow_event"."outcome_side" in ('up','down'));--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_reported_side_chk" CHECK ("polymarket_trade_flow_event"."reported_side" in ('buy','sell'));--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_price_chk" CHECK ("polymarket_trade_flow_event"."price" > 0 and "polymarket_trade_flow_event"."price" < 1);--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_shares_chk" CHECK ("polymarket_trade_flow_event"."shares" > 0);--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_notional_chk" CHECK ("polymarket_trade_flow_event"."notional_usd" > 0);--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_boundary_chk" CHECK ("polymarket_trade_flow_event"."event_at" >= timestamp '2026-07-23 20:00:00'
+        and "polymarket_trade_flow_event"."window_start" >= timestamp '2026-07-23 20:00:00');--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_window_chk" CHECK ("polymarket_trade_flow_event"."end_date" = "polymarket_trade_flow_event"."window_start" + ("polymarket_trade_flow_event"."horizon_min" * interval '1 minute'));--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_chain_status_chk" CHECK ("polymarket_trade_flow_event"."chain_status" in ('pending','missing_hash','verified','mismatch','reverted'));--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_chain_side_chk" CHECK ("polymarket_trade_flow_event"."chain_side" is null or "polymarket_trade_flow_event"."chain_side" in ('buy','sell'));

@@ -1,0 +1,1 @@
+CREATE INDEX "paper_trade_performance_idx" ON "paper_trade" USING btree ("bot_key","horizon_min","window_start");

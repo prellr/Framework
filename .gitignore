@@ -7,3 +7,8 @@ dist/
 *.log
 .DS_Store
 nginx/ssl/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+tmp/

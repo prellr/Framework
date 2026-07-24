@@ -36,7 +36,7 @@ export function ForgotPasswordPage() {
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Boxes className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-bold">Framework</h1>
+          <h1 className="text-2xl font-bold">Alchemy</h1>
         </div>
 
         <Card>

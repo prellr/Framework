@@ -1,0 +1,1 @@
+ALTER TABLE "paper_trade" ADD COLUMN "model_meta" jsonb;

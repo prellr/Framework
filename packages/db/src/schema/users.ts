@@ -12,6 +12,10 @@ export const users = pgTable("user", {
   image: text("image"),
   // Added by Better Auth admin plugin
   role: text("role").$type<Role>().default("viewer"),
+  // IANA timezone (e.g. "America/Chicago"). The API container runs in UTC, so any calendar-day
+  // bucketing must be done in the VIEWER's zone or a US evening's trading splits across two days.
+  // Null = fall back to the browser-detected zone.
+  timezone: text("timezone"),
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
