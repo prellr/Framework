@@ -81,6 +81,13 @@ ssh admin@192.168.2.17 '
     --exclude=.env \
     --exclude=.git \
     --exclude=node_modules \
+    --exclude='.codex-*' \
+    --exclude=backups \
+    --exclude=.ruff_cache \
+    --exclude=tmp \
+    --exclude=.venv \
+    --exclude=__pycache__ \
+    --exclude=dist \
     --exclude=.DS_Store \
     -czf "$recovery_dir/source.tgz" .
   /Users/admin/.orbstack/bin/docker compose exec -T postgres \
@@ -93,11 +100,18 @@ ssh admin@192.168.2.17 '
 # 4. Preview the exact source delta. Review deletes before removing -n.
 rsync -azn --delete --itemize-changes \
   --exclude node_modules --exclude .git --exclude .env \
+  --exclude '.codex-*' --exclude backups \
+  --exclude .ruff_cache --exclude tmp --exclude .venv \
+  --exclude __pycache__ --exclude dist \
   ./ admin@192.168.2.17:/Users/admin/jester-analytics/
 
-# 5. Sync the repo to the server (exclude node_modules / .env / .git):
+# 5. Sync the repo to the server. In-tree historical recovery material is protected from
+#    --delete; new release recovery points live outside the deployment tree.
 rsync -az --delete \
   --exclude node_modules --exclude .git --exclude .env \
+  --exclude '.codex-*' --exclude backups \
+  --exclude .ruff_cache --exclude tmp --exclude .venv \
+  --exclude __pycache__ --exclude dist \
   ./ admin@192.168.2.17:/Users/admin/jester-analytics/
 ```
 
@@ -145,6 +159,9 @@ restore_dir=$(mktemp -d)
 tar -xzf "$recovery_dir/source.tgz" -C "$restore_dir"
 rsync -az --delete \
   --exclude .env --exclude .git --exclude node_modules \
+  --exclude '.codex-*' --exclude backups \
+  --exclude .ruff_cache --exclude tmp --exclude .venv \
+  --exclude __pycache__ --exclude dist \
   "$restore_dir/" /Users/admin/jester-analytics/
 
 cd /Users/admin/jester-analytics
