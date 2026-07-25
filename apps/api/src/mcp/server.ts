@@ -44,7 +44,8 @@ const obj = (props: object, required: string[] = []) => ({
 const TOOLS: McpTool[] = [
   {
     name: "analysis_search_strategies",
-    description: "List mirrored Jester strategies (id, name, tier, category). Optionally filter by tier.",
+    description:
+      "List mirrored Jester strategies (id, name, tier, category). Optionally filter by tier.",
     inputSchema: obj({ tier: { type: "string", description: "BASIC | STANDARD | PREMIUM" } }),
     role: "viewer",
     run: (a, c) => c.catalog.list(a?.tier ? { tier: a.tier } : undefined),
@@ -79,7 +80,8 @@ const TOOLS: McpTool[] = [
   },
   {
     name: "analysis_account_status",
-    description: "Non-secret Jester connection status for the agent's account (accountId, hyperliquidReady).",
+    description:
+      "Non-secret Jester connection status for the agent's account (accountId, hyperliquidReady).",
     inputSchema: obj({}),
     role: "viewer",
     run: (_a, c) => c.credentials.status(),
@@ -91,6 +93,14 @@ const TOOLS: McpTool[] = [
     inputSchema: obj({}),
     role: "viewer",
     run: (_a, c) => c.polymarket.microstructureTape(),
+  },
+  {
+    name: "analysis_polymarket_multi_stake_capacity_status",
+    description:
+      "Read-only count/span/coverage readiness for the prospective $5/$10/$20 same-book capacity tape. Returns no outcomes, strategy evidence, decisions, P&L, verdict input, or execution capability.",
+    inputSchema: obj({}),
+    role: "viewer",
+    run: (_a, c) => c.polymarket.multiStakeCapacityTape(),
   },
   {
     name: "analysis_venue_lead_lag_status",
@@ -215,7 +225,7 @@ const TOOLS: McpTool[] = [
   {
     name: "analysis_run_sweep",
     description:
-      "Launch a backtest sweep over a matrix {strategies, assets, timeframes, windows}. Requires operator role. windows are day counts or the string \"max\".",
+      'Launch a backtest sweep over a matrix {strategies, assets, timeframes, windows}. Requires operator role. windows are day counts or the string "max".',
     inputSchema: obj(
       {
         name: { type: "string" },
@@ -250,7 +260,8 @@ const TOOLS: McpTool[] = [
   },
   {
     name: "kb_get",
-    description: "Fetch one knowledge article by slug, with its full markdown body and revision count.",
+    description:
+      "Fetch one knowledge article by slug, with its full markdown body and revision count.",
     inputSchema: obj({ slug: { type: "string" } }, ["slug"]),
     role: "viewer",
     run: (a, c) => c.kb.get({ slug: a.slug }),
@@ -273,7 +284,10 @@ const TOOLS: McpTool[] = [
         category: { type: "string" },
         tags: { type: "array", items: { type: "string" } },
         body: { type: "string", description: "markdown" },
-        sources: { type: "array", items: obj({ title: { type: "string" }, url: { type: "string" } }, ["title", "url"]) },
+        sources: {
+          type: "array",
+          items: obj({ title: { type: "string" }, url: { type: "string" } }, ["title", "url"]),
+        },
         status: { type: "string", description: "active|superseded|archived" },
         supersededBySlug: { type: "string" },
       },
@@ -297,7 +311,8 @@ const TOOLS: McpTool[] = [
 const PROMPTS = [
   {
     name: "screen-strategy",
-    description: "Rigorously screen a strategy for a durable edge (the methodology this system enforces).",
+    description:
+      "Rigorously screen a strategy for a durable edge (the methodology this system enforces).",
     arguments: [{ name: "strategyId", description: "Strategy to screen", required: true }],
     build: (a: any) => ({
       messages: [
@@ -325,9 +340,18 @@ const INTENT_GUIDE = {
     "Observe before you act. Read the warehouse first; only launch sweeps when coverage is thin. And search the knowledge base (kb_search) BEFORE re-researching anything — write findings back with kb_write after.",
   routes: [
     { userSays: ["what strategies", "catalog"], tools: ["analysis_search_strategies"] },
-    { userSays: ["results", "best strategy", "profit factor", "backtest"], tools: ["analysis_query_results", "analysis_strategy_detail"] },
-    { userSays: ["run a sweep", "backtest these", "screen"], tools: ["analysis_run_sweep (operator)", "analysis_sweep_status"] },
-    { userSays: ["what do we know", "have we researched", "why did we", "findings", "prior work"], tools: ["kb_search", "kb_get"] },
+    {
+      userSays: ["results", "best strategy", "profit factor", "backtest"],
+      tools: ["analysis_query_results", "analysis_strategy_detail"],
+    },
+    {
+      userSays: ["run a sweep", "backtest these", "screen"],
+      tools: ["analysis_run_sweep (operator)", "analysis_sweep_status"],
+    },
+    {
+      userSays: ["what do we know", "have we researched", "why did we", "findings", "prior work"],
+      tools: ["kb_search", "kb_get"],
+    },
     { userSays: ["record this", "write it down", "save finding", "document"], tools: ["kb_write"] },
     { userSays: ["am i connected", "account"], tools: ["analysis_account_status"] },
   ],
@@ -361,7 +385,11 @@ function makeCaller(role: "viewer" | "operator", req: Request): Caller {
 }
 
 const ok = (id: unknown, result: unknown) => ({ jsonrpc: "2.0", id, result });
-const err = (id: unknown, code: number, message: string) => ({ jsonrpc: "2.0", id, error: { code, message } });
+const err = (id: unknown, code: number, message: string) => ({
+  jsonrpc: "2.0",
+  id,
+  error: { code, message },
+});
 
 export function createMcpApp() {
   const app = new Hono();
@@ -371,7 +399,8 @@ export function createMcpApp() {
     if (!auth) return c.json(err(null, -32001, "Unauthorized: valid X-API-Key required"), 401);
 
     const body = await c.req.json().catch(() => null);
-    if (!body || body.jsonrpc !== "2.0") return c.json(err(null, -32600, "Invalid JSON-RPC request"), 400);
+    if (!body || body.jsonrpc !== "2.0")
+      return c.json(err(null, -32600, "Invalid JSON-RPC request"), 400);
     const { id, method, params } = body;
 
     switch (method) {
@@ -391,7 +420,11 @@ export function createMcpApp() {
       case "tools/list":
         return c.json(
           ok(id, {
-            tools: TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
+            tools: TOOLS.map((t) => ({
+              name: t.name,
+              description: t.description,
+              inputSchema: t.inputSchema,
+            })),
           }),
         );
 
@@ -406,12 +439,22 @@ export function createMcpApp() {
           return c.json(ok(id, { content: [{ type: "text", text: JSON.stringify(result) }] }));
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
-          return c.json(ok(id, { content: [{ type: "text", text: `Error: ${message}` }], isError: true }));
+          return c.json(
+            ok(id, { content: [{ type: "text", text: `Error: ${message}` }], isError: true }),
+          );
         }
       }
 
       case "prompts/list":
-        return c.json(ok(id, { prompts: PROMPTS.map(({ name, description, arguments: a }) => ({ name, description, arguments: a })) }));
+        return c.json(
+          ok(id, {
+            prompts: PROMPTS.map(({ name, description, arguments: a }) => ({
+              name,
+              description,
+              arguments: a,
+            })),
+          }),
+        );
 
       case "prompts/get": {
         const prompt = PROMPTS.find((p) => p.name === params?.name);
@@ -424,9 +467,17 @@ export function createMcpApp() {
           ok(id, {
             resources: [],
             resourceTemplates: [
-              { uriTemplate: "strategy://{id}", name: "Strategy detail", description: "All warehouse rows for a strategy" },
+              {
+                uriTemplate: "strategy://{id}",
+                name: "Strategy detail",
+                description: "All warehouse rows for a strategy",
+              },
               { uriTemplate: "sweep://{id}", name: "Sweep", description: "A sweep with its cells" },
-              { uriTemplate: "kb://{slug}", name: "Knowledge article", description: "A knowledge-base article by slug" },
+              {
+                uriTemplate: "kb://{slug}",
+                name: "Knowledge article",
+                description: "A knowledge-base article by slug",
+              },
             ],
           }),
         );
@@ -443,7 +494,11 @@ export function createMcpApp() {
           else if (sweep) data = await caller.sweeps.get({ id: sweep[1] });
           else if (kb) data = await caller.kb.get({ slug: kb[1] });
           else return c.json(err(id, -32602, `Unsupported resource uri: ${uri}`));
-          return c.json(ok(id, { contents: [{ uri, mimeType: "application/json", text: JSON.stringify(data) }] }));
+          return c.json(
+            ok(id, {
+              contents: [{ uri, mimeType: "application/json", text: JSON.stringify(data) }],
+            }),
+          );
         } catch (e) {
           return c.json(err(id, -32603, e instanceof Error ? e.message : String(e)));
         }

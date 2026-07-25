@@ -96,6 +96,7 @@
     "audit:polymarket-shadow-connector-record": "tsx --env-file=../../.env src/scripts/record-polymarket-shadow-connector-v1.ts",
     "audit:polymarket-shadow-connector-latency-preregister": "tsx --env-file=../../.env src/scripts/record-polymarket-shadow-connector-latency-audit-v1.ts",
     "audit:polymarket-shadow-connector-latency-record-launch": "tsx --env-file=../../.env src/scripts/record-polymarket-shadow-connector-latency-launch.ts",
+    "audit:polymarket-multi-stake-capacity-preregister": "tsx --env-file=../../.env src/scripts/record-polymarket-multi-stake-capacity-v1.ts",
     "audit:macro-direction-controls-preregister": "tsx --env-file=../../.env src/scripts/record-macro-direction-controls-v1.ts",
     "audit:macro-direction-controls-record-launch": "tsx --env-file=../../.env src/scripts/record-macro-direction-controls-launch.ts",
     "audit:macro-direction-coverage-preregister": "tsx --env-file=../../.env src/scripts/record-macro-direction-coverage-v1.ts",

@@ -4,7 +4,10 @@ import { scoreboard, scoreSeries } from "../services/polymarket-updown.ts";
 import { floorState, paperAssetFeed, paperStrategyFeed } from "../services/paper-floor.ts";
 import { paperFloorView } from "../services/paper-floor-view.ts";
 import { fetchLiveCryptoUpDown, updownHorizonMinutes } from "../services/polymarket.ts";
-import { polymarketMicrostructureTapeStatus } from "../services/polymarket-state-tape.ts";
+import {
+  polymarketMicrostructureTapeStatus,
+  polymarketMultiStakeCapacityStatus,
+} from "../services/polymarket-state-tape.ts";
 import { venueLeadLagTapeStatus } from "../services/venue-lead-lag-report.ts";
 import { deribitSkewTapeStatus } from "../services/deribit-skew.ts";
 import { pricerCalibrationAudit } from "../services/pricer-calibration.ts";
@@ -17,22 +20,16 @@ import { fourStreakReversalAudit } from "../services/four-streak-reversal-audit.
 import { strategyIndependenceStatus } from "../services/strategy-independence.ts";
 import { completeSetTakerAudit } from "../services/complete-set-taker-audit.ts";
 import { authoritativeTradeFlowTapeStatus } from "../services/polymarket-trade-flow-report.ts";
-import {
-  authoritativeTakerFlowDistributionAudit,
-} from "../services/authoritative-taker-flow-distribution-audit.ts";
+import { authoritativeTakerFlowDistributionAudit } from "../services/authoritative-taker-flow-distribution-audit.ts";
 import { authoritativeTakerPressureDistributionAudit } from "../services/authoritative-taker-pressure-distribution-audit.ts";
-import {
-  clobChainPressureConcordanceAudit,
-} from "../services/clob-chain-pressure-concordance-audit.ts";
+import { clobChainPressureConcordanceAudit } from "../services/clob-chain-pressure-concordance-audit.ts";
 import { smoothPathFunnelStatus } from "../services/smooth-path-funnel-report.ts";
 import { hyperliquidFlowTapeStatus } from "../services/hyperliquid-flow-report.ts";
 import { clobEventOfiTapeStatus } from "../services/clob-event-ofi-report.ts";
 import { flowDistributionAudit } from "../services/flow-distribution-audit.ts";
 import { microstructureStateDistributionAudit } from "../services/microstructure-state-distribution-audit.ts";
 import { polymarketShadowConnectorAudit } from "../services/polymarket-shadow-connector-audit.ts";
-import {
-  resolutionSourceBasisDistributionAudit,
-} from "../services/resolution-source-basis-distribution.ts";
+import { resolutionSourceBasisDistributionAudit } from "../services/resolution-source-basis-distribution.ts";
 import { idNr4QualityDistributionAudit } from "../services/id-nr4-quality-distribution.ts";
 import { z } from "zod";
 import { paperPerformance } from "../services/paper-performance.ts";
@@ -49,51 +46,69 @@ export const polymarketRouter = t.router({
   // Scope-specific read projection. It carries the same authoritative gates but sends large equity,
   // feed, and diagnostic collections only to the view that renders them.
   floorView: protectedProcedure
-    .input(z.object({
-      scope: z.enum(["paper", "forward", "history"]),
-      view: z.enum(["scoreboard", "floor", "strategy", "registry"]),
-    }))
+    .input(
+      z.object({
+        scope: z.enum(["paper", "forward", "history"]),
+        view: z.enum(["scoreboard", "floor", "strategy", "registry"]),
+      }),
+    )
     .query(({ input }) => paperFloorView(input)),
   // A bounded strategy-specific evidence feed for the detail page. Read-only and paper-only.
   strategyFeed: protectedProcedure
-    .input(z.object({
-      botKey: z.string().min(1).max(80),
-      horizonMin: z.union([z.literal(5), z.literal(15)]),
-      scope: z.enum(["paper", "forward", "history"]).default("forward"),
-      assets: z.array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"])).min(1).max(6).optional(),
-      limit: z.number().int().min(1).max(200).default(100),
-    }))
+    .input(
+      z.object({
+        botKey: z.string().min(1).max(80),
+        horizonMin: z.union([z.literal(5), z.literal(15)]),
+        scope: z.enum(["paper", "forward", "history"]).default("forward"),
+        assets: z
+          .array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]))
+          .min(1)
+          .max(6)
+          .optional(),
+        limit: z.number().int().min(1).max(200).default(100),
+      }),
+    )
     .query(({ input }) => paperStrategyFeed(input)),
   // Bounded all-strategy feed for one asset research page. Read-only; no execution capability.
   assetFeed: protectedProcedure
-    .input(z.object({
-      asset: z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]),
-      horizonMin: z.union([z.literal(5), z.literal(15)]),
-      scope: z.enum(["paper", "forward", "history"]).default("forward"),
-      limit: z.number().int().min(1).max(200).default(100),
-    }))
+    .input(
+      z.object({
+        asset: z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]),
+        horizonMin: z.union([z.literal(5), z.literal(15)]),
+        scope: z.enum(["paper", "forward", "history"]).default("forward"),
+        limit: z.number().int().min(1).max(200).default(100),
+      }),
+    )
     .query(({ input }) => paperAssetFeed(input)),
   // Read-optimized diagnostic lens: strategy × timeframe rankings plus one selected cohort's
   // calendar/session/asset/side/ask segmentation. It cannot place orders or alter the verdict gate.
   performance: protectedProcedure
-    .input(z.object({
-      scope: z.enum(["paper", "forward", "history"]).default("forward"),
-      period: z.enum(["24h", "3d", "7d", "30d", "all"]).default("all"),
-      timezone: z.string().min(1).max(64).default("America/Chicago"),
-      asset: z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]).optional(),
-      assets: z.array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"])).min(1).max(6).optional(),
-      segmentBotKey: z.string().min(1).max(80).optional(),
-      segmentHorizonMin: z.union([z.literal(5), z.literal(15)]).optional(),
-    }))
+    .input(
+      z.object({
+        scope: z.enum(["paper", "forward", "history"]).default("forward"),
+        period: z.enum(["24h", "3d", "7d", "30d", "all"]).default("all"),
+        timezone: z.string().min(1).max(64).default("America/Chicago"),
+        asset: z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]).optional(),
+        assets: z
+          .array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]))
+          .min(1)
+          .max(6)
+          .optional(),
+        segmentBotKey: z.string().min(1).max(80).optional(),
+        segmentHorizonMin: z.union([z.literal(5), z.literal(15)]).optional(),
+      }),
+    )
     .query(({ input }) => paperPerformance(input)),
   // Raw prospective research-tape readiness only; no outcome-conditioned diagnostics before its floor.
   microstructureTape: protectedProcedure.query(() => polymarketMicrostructureTapeStatus()),
+  // Same-book $5/$10/$20 depth coverage only; no outcomes, strategy evidence, or execution path.
+  multiStakeCapacityTape: protectedProcedure.query(() => polymarketMultiStakeCapacityStatus()),
   // Collection progress only: no cross-correlations or signs before LEAD-LAG-REPORT-V1 is ready.
   venueLeadLagTape: protectedProcedure.query(() => venueLeadLagTapeStatus()),
   // Chain-verified, unsigned liquidity/timing quantiles only. The value query remains unreachable
   // until the inherited seven-day taker-flow gate passes and cannot expose token or trade direction.
-  authoritativeTakerFlowDistributionAudit: protectedProcedure.query(
-    () => authoritativeTakerFlowDistributionAudit(),
+  authoritativeTakerFlowDistributionAudit: protectedProcedure.query(() =>
+    authoritativeTakerFlowDistributionAudit(),
   ),
   // One verified first-minute row per market; only unsigned activity/pressure magnitude is exposed.
   // Chain-confirmed pressure is a proxy-validation reference, not an assumed live decision input.
@@ -107,14 +122,12 @@ export const polymarketRouter = t.router({
   ),
   // Outcome-free basis/change/persistence quantiles. The feature query stays unreachable until all
   // six pairs pass the inherited venue-tape row/span/block floor.
-  resolutionSourceBasisDistributionAudit: protectedProcedure.query(
-    () => resolutionSourceBasisDistributionAudit(),
+  resolutionSourceBasisDistributionAudit: protectedProcedure.query(() =>
+    resolutionSourceBasisDistributionAudit(),
   ),
   // Prospective, direction-invariant ID/NR4 feature distributions. Counts are shown first; the
   // value query remains unreachable until every frozen row/pair/span floor passes.
-  idNr4QualityDistributionAudit: protectedProcedure.query(
-    () => idNr4QualityDistributionAudit(),
-  ),
+  idNr4QualityDistributionAudit: protectedProcedure.query(() => idNr4QualityDistributionAudit()),
   // Collection progress only: no IV skew/OI sign or directional diagnostic before its frozen floor.
   deribitSkewTape: protectedProcedure.query(() => deribitSkewTapeStatus()),
   // Counts only until all frozen floors pass; then the preregistered pooled proper-score audit.
@@ -151,8 +164,8 @@ export const polymarketRouter = t.router({
   flowDistributionAudit: protectedProcedure.query(() => flowDistributionAudit()),
   // Outcome-free paired-book state quantiles by asset × horizon × sample minute. The grouped
   // feature query remains unreachable until the inherited raw microstructure tape gate passes.
-  microstructureStateDistributionAudit: protectedProcedure.query(
-    () => microstructureStateDistributionAudit(),
+  microstructureStateDistributionAudit: protectedProcedure.query(() =>
+    microstructureStateDistributionAudit(),
   ),
 
   liveMarkets: protectedProcedure.query(async () => {

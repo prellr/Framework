@@ -8,7 +8,7 @@
  * Rows are labeled only after the CLOB reports a winner. Any model built from this tape must be
  * specified and registered separately before it begins a fresh forward evaluation window.
  */
-import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db, polymarketStateSnapshots } from "@framework/db";
 import { getSetting } from "./config.ts";
 import { getRecentCandles } from "./hyperliquid.ts";
@@ -34,10 +34,12 @@ import {
   POLYMARKET_MICROSTRUCTURE_TAPE,
 } from "./polymarket-microstructure.ts";
 import { takerFeeDescriptor, type TakerFeeDescriptor } from "./polymarket-fees.ts";
+import { STATE_TAPE_EXECUTION_V2, stateTapeBookFill } from "./state-tape-execution.ts";
 import {
-  STATE_TAPE_EXECUTION_V2,
-  stateTapeBookFill,
-} from "./state-tape-execution.ts";
+  multiStakeCapacityCapture,
+  multiStakeCapacityReady,
+  POLYMARKET_MULTI_STAKE_CAPACITY,
+} from "./polymarket-multi-stake-capacity.ts";
 import {
   CLOB_EVENT_OFI_TAPE,
   clobEventOfiNow,
@@ -86,7 +88,8 @@ function liveMarket(market: GammaMarket, now: number): LiveMarket | null {
   const pair = pairOf(market.question);
   const horizonMin = updownHorizonMinutes(market.question);
   const endMs = market.endDate ? new Date(market.endDate).getTime() : NaN;
-  if (!pair || !horizonMin || horizonMin > STATE_TAPE.maxHorizonMin || !Number.isFinite(endMs)) return null;
+  if (!pair || !horizonMin || horizonMin > STATE_TAPE.maxHorizonMin || !Number.isFinite(endMs))
+    return null;
   const startMs = endMs - horizonMin * 60_000;
   const remainingSec = Math.floor((endMs - now) / 1000);
   const sampleMinute = surfaceSampleMinute(startMs, now);
@@ -95,7 +98,10 @@ function liveMarket(market: GammaMarket, now: number): LiveMarket | null {
 }
 
 /** Capture at most one immutable row per market and elapsed minute. Public/read-only APIs only. */
-export async function capturePolymarketStateTick(): Promise<{ captured: number; considered: number }> {
+export async function capturePolymarketStateTick(): Promise<{
+  captured: number;
+  considered: number;
+}> {
   if (!(await enabled())) return { captured: 0, considered: 0 };
   const now = Date.now();
   const live = (await fetchCurrentCryptoUpDown().catch(() => []))
@@ -113,7 +119,9 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
   const candleCache = new Map<string, CandleState | null>();
   const candlesFor = async (pair: string): Promise<CandleState | null> => {
     if (!candleCache.has(pair)) {
-      const candles = await getRecentCandles(coinOf(pair), 1, PRICER.volMaxBars + 65).catch(() => []);
+      const candles = await getRecentCandles(coinOf(pair), 1, PRICER.volMaxBars + 65).catch(
+        () => [],
+      );
       if (candles.length < PRICER.volMinBars + 1) candleCache.set(pair, null);
       else {
         const closes = candles.map((c) => c.c);
@@ -134,7 +142,8 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
   for (const x of live) {
     const cd = await candlesFor(x.pair);
     if (!cd) continue;
-    if (!cd.strikeByStart.has(x.startMs)) cd.strikeByStart.set(x.startMs, strikeAt(cd.candles, x.startMs));
+    if (!cd.strikeByStart.has(x.startMs))
+      cd.strikeByStart.set(x.startMs, strikeAt(cd.candles, x.startMs));
     const hlStrike = cd.strikeByStart.get(x.startMs) ?? null;
 
     const clNow = chainlinkNow(x.pair);
@@ -147,7 +156,8 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
     const coords = normalizedDistance(spot, strike, cd.sigma, x.remainingSec);
     if (!coords) continue;
 
-    const upToken = upTokenId(x.market), downToken = downTokenId(x.market);
+    const upToken = upTokenId(x.market),
+      downToken = downTokenId(x.market);
     if (!upToken || !downToken) continue;
     // The socket accumulator advances continuously while this async tick discovers markets and
     // fetches reference data. Sample its read clock synchronously with the read itself; reusing the
@@ -159,9 +169,7 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
     if (now >= STATE_TAPE_EXECUTION_V2.evalStartMs) {
       fee = feeByCondition.get(x.market.conditionId) ?? null;
       if (!fee) {
-        fee = takerFeeDescriptor(
-          await fetchClobMarketInfo(x.market.conditionId).catch(() => null),
-        );
+        fee = takerFeeDescriptor(await fetchClobMarketInfo(x.market.conditionId).catch(() => null));
         if (fee) feeByCondition.set(x.market.conditionId, fee);
       }
     }
@@ -171,11 +179,13 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
     if (!upBook || !downBook) continue;
     const upFill = stateTapeBookFill(upBook, now, fee);
     const downFill = stateTapeBookFill(downBook, now, fee);
-    const up = bookSummary(upBook), down = bookSummary(downBook);
+    // Capacity walks reuse these exact two already-fetched books. This performs no network I/O and
+    // cannot influence any strategy decision, paper trade, verdict, or execution path.
+    const capacity = multiStakeCapacityCapture(upBook, downBook, now, fee);
+    const up = bookSummary(upBook),
+      down = bookSummary(downBook);
     const basisBps = clNow != null && clNow.px > 0 ? 10_000 * Math.log(cd.spot / clNow.px) : null;
-    const hlFlow = now >= HYPERLIQUID_FLOW_TAPE.evalStartMs
-      ? hlFlowNow(x.pair, now)
-      : null;
+    const hlFlow = now >= HYPERLIQUID_FLOW_TAPE.evalStartMs ? hlFlowNow(x.pair, now) : null;
     const microstructure = microstructureCaptureEnabled(now)
       ? {
           upBidSize: up.bestBidSize,
@@ -226,6 +236,11 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
         downAsk: down.bestAsk,
         upFill5: upFill?.effectiveVwap ?? null,
         downFill5: downFill?.effectiveVwap ?? null,
+        capacityVersion: capacity?.version ?? null,
+        upFill10: capacity?.upFill10 ?? null,
+        downFill10: capacity?.downFill10 ?? null,
+        upFill20: capacity?.upFill20 ?? null,
+        downFill20: capacity?.downFill20 ?? null,
         hlFlowVersion: hlFlow?.version ?? null,
         hlFlowImbalance5s: hlFlow?.imbalance5s ?? null,
         hlFlowImbalance30s: hlFlow?.imbalance30s ?? null,
@@ -252,21 +267,21 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
     captured += rows.length;
   }
   if (
-    now >= CLOB_EVENT_OFI_TAPE.evalStartMs
-    && live.length > 0
-    && clobEventOfiUsable === 0
-    && now - lastClobEventOfiUnavailableLogAt >= 60_000
+    now >= CLOB_EVENT_OFI_TAPE.evalStartMs &&
+    live.length > 0 &&
+    clobEventOfiUsable === 0 &&
+    now - lastClobEventOfiUnavailableLogAt >= 60_000
   ) {
     const status = clobEventOfiRuntimeStatus(now);
     console.warn(
-      `[clob-event-ofi] unavailable considered=${live.length}`
-      + ` connected=${status.connected}`
-      + ` tracked=${status.trackedTokens}`
-      + ` initialized=${status.initializedTokens}`
-      + ` retained-events=${status.retainedEvents}`
-      + ` books=${status.bookFrames}`
-      + ` changes=${status.priceChangeFrames}`
-      + ` market-data-age-sec=${status.lastMarketDataAgeSec?.toFixed(1) ?? "none"}`,
+      `[clob-event-ofi] unavailable considered=${live.length}` +
+        ` connected=${status.connected}` +
+        ` tracked=${status.trackedTokens}` +
+        ` initialized=${status.initializedTokens}` +
+        ` retained-events=${status.retainedEvents}` +
+        ` books=${status.bookFrames}` +
+        ` changes=${status.priceChangeFrames}` +
+        ` market-data-age-sec=${status.lastMarketDataAgeSec?.toFixed(1) ?? "none"}`,
     );
     lastClobEventOfiUnavailableLogAt = now;
   }
@@ -274,32 +289,53 @@ export async function capturePolymarketStateTick(): Promise<{ captured: number; 
 }
 
 /** Label all rows for due markets once; markets still unresolved after a day terminate as void. */
-export async function gradePolymarketStateTick(): Promise<{ markets: number; rows: number; voided: number }> {
+export async function gradePolymarketStateTick(): Promise<{
+  markets: number;
+  rows: number;
+  voided: number;
+}> {
   if (!(await enabled())) return { markets: 0, rows: 0, voided: 0 };
   const cutoff = new Date(Date.now() - 90_000);
   const due = await db
-    .select({ conditionId: polymarketStateSnapshots.conditionId, endDate: sql<Date>`min(${polymarketStateSnapshots.endDate})` })
+    .select({
+      conditionId: polymarketStateSnapshots.conditionId,
+      endDate: sql<Date>`min(${polymarketStateSnapshots.endDate})`,
+    })
     .from(polymarketStateSnapshots)
-    .where(and(eq(polymarketStateSnapshots.labelStatus, "open"), isNull(polymarketStateSnapshots.resolvedUp), lt(polymarketStateSnapshots.endDate, cutoff)))
+    .where(
+      and(
+        eq(polymarketStateSnapshots.labelStatus, "open"),
+        isNull(polymarketStateSnapshots.resolvedUp),
+        lt(polymarketStateSnapshots.endDate, cutoff),
+      ),
+    )
     .groupBy(polymarketStateSnapshots.conditionId)
     .limit(STATE_TAPE.gradeBatchMarkets);
 
-  let markets = 0, rows = 0, voided = 0;
+  let markets = 0,
+    rows = 0,
+    voided = 0;
   for (const item of due) {
     const clob = await fetchClobMarket(item.conditionId).catch(() => null);
     const upToken = clob?.tokens.find((token) => /up/i.test(token.outcome));
-    const resolvedUp = clob?.closed && upToken
-      ? typeof upToken.winner === "boolean"
-        ? upToken.winner
-        : typeof upToken.price === "number"
-          ? upToken.price > 0.5
-          : null
-      : null;
+    const resolvedUp =
+      clob?.closed && upToken
+        ? typeof upToken.winner === "boolean"
+          ? upToken.winner
+          : typeof upToken.price === "number"
+            ? upToken.price > 0.5
+            : null
+        : null;
     if (resolvedUp != null) {
       const changed = await db
         .update(polymarketStateSnapshots)
         .set({ labelStatus: "resolved", resolvedUp, labeledAt: new Date() })
-        .where(and(eq(polymarketStateSnapshots.conditionId, item.conditionId), eq(polymarketStateSnapshots.labelStatus, "open")))
+        .where(
+          and(
+            eq(polymarketStateSnapshots.conditionId, item.conditionId),
+            eq(polymarketStateSnapshots.labelStatus, "open"),
+          ),
+        )
         .returning({ id: polymarketStateSnapshots.id });
       markets++;
       rows += changed.length;
@@ -307,7 +343,12 @@ export async function gradePolymarketStateTick(): Promise<{ markets: number; row
       const changed = await db
         .update(polymarketStateSnapshots)
         .set({ labelStatus: "void", labeledAt: new Date() })
-        .where(and(eq(polymarketStateSnapshots.conditionId, item.conditionId), eq(polymarketStateSnapshots.labelStatus, "open")))
+        .where(
+          and(
+            eq(polymarketStateSnapshots.conditionId, item.conditionId),
+            eq(polymarketStateSnapshots.labelStatus, "open"),
+          ),
+        )
         .returning({ id: polymarketStateSnapshots.id });
       voided += changed.length;
     }
@@ -364,5 +405,96 @@ export async function polymarketMicrostructureTapeStatus() {
     firstCapturedAtMs: firstMs,
     lastCapturedAtMs: lastMs,
     readyForFrozenDiagnostic: microstructureDiagnosticReady(resolvedMarkets, spanDays),
+  };
+}
+
+/**
+ * Read-only collection readiness for the prospective $5/$10/$20 capacity tape.
+ *
+ * This query intentionally selects no resolution label, outcome, strategy, decision, trade, or P&L.
+ * It exposes only collection coverage and asset × timeframe market counts.
+ */
+export async function polymarketMultiStakeCapacityStatus() {
+  const boundary = new Date(POLYMARKET_MULTI_STAKE_CAPACITY.evalStartMs);
+  const registeredRows = and(
+    gte(polymarketStateSnapshots.capturedAt, boundary),
+    inArray(polymarketStateSnapshots.horizonMin, [5, 15]),
+  );
+  const usablePredicate = sql`
+    ${polymarketStateSnapshots.capacityVersion} = ${POLYMARKET_MULTI_STAKE_CAPACITY.version}
+    and ${polymarketStateSnapshots.upFill10} is not null
+    and ${polymarketStateSnapshots.downFill10} is not null
+    and ${polymarketStateSnapshots.upFill20} is not null
+    and ${polymarketStateSnapshots.downFill20} is not null
+  `;
+  const [aggregateRows, buckets] = await Promise.all([
+    db
+      .select({
+        rows: sql<number>`count(*)::int`,
+        usableRows: sql<number>`count(*) filter (where ${usablePredicate})::int`,
+        markets: sql<number>`count(distinct ${polymarketStateSnapshots.conditionId})::int`,
+        firstCapturedAt: sql<Date | null>`min(${polymarketStateSnapshots.capturedAt})`,
+        lastCapturedAt: sql<Date | null>`max(${polymarketStateSnapshots.capturedAt})`,
+      })
+      .from(polymarketStateSnapshots)
+      .where(registeredRows),
+    db
+      .select({
+        pair: polymarketStateSnapshots.pair,
+        horizonMin: polymarketStateSnapshots.horizonMin,
+        rows: sql<number>`count(*)::int`,
+        usableRows: sql<number>`count(*) filter (where ${usablePredicate})::int`,
+        markets: sql<number>`count(distinct ${polymarketStateSnapshots.conditionId})::int`,
+      })
+      .from(polymarketStateSnapshots)
+      .where(registeredRows)
+      .groupBy(polymarketStateSnapshots.pair, polymarketStateSnapshots.horizonMin),
+  ]);
+
+  const aggregate = aggregateRows[0];
+  const rows = Number(aggregate?.rows ?? 0);
+  const usableRows = Number(aggregate?.usableRows ?? 0);
+  const markets = Number(aggregate?.markets ?? 0);
+  const firstMs = aggregate?.firstCapturedAt ? new Date(aggregate.firstCapturedAt).getTime() : null;
+  const lastMs = aggregate?.lastCapturedAt ? new Date(aggregate.lastCapturedAt).getTime() : null;
+  const spanDays = firstMs != null && lastMs != null ? (lastMs - firstMs) / 86_400_000 : 0;
+  const coverage = rows > 0 ? usableRows / rows : 0;
+  const bucketRows = buckets.map((bucket) => ({
+    pair: bucket.pair,
+    horizonMin: bucket.horizonMin,
+    rows: Number(bucket.rows),
+    usableRows: Number(bucket.usableRows),
+    markets: Number(bucket.markets),
+  }));
+  const minBucketMarkets =
+    bucketRows.length === 12 ? Math.min(...bucketRows.map((bucket) => bucket.markets)) : 0;
+
+  return {
+    version: POLYMARKET_MULTI_STAKE_CAPACITY.version,
+    evalStartMs: POLYMARKET_MULTI_STAKE_CAPACITY.evalStartMs,
+    modeledStakeUsd: [...POLYMARKET_MULTI_STAKE_CAPACITY.modeledStakeUsd],
+    minMarkets: POLYMARKET_MULTI_STAKE_CAPACITY.minMarkets,
+    minSpanDays: POLYMARKET_MULTI_STAKE_CAPACITY.minSpanDays,
+    minMarketsPerAssetTimeframe: POLYMARKET_MULTI_STAKE_CAPACITY.minMarketsPerAssetTimeframe,
+    minCoverage: POLYMARKET_MULTI_STAKE_CAPACITY.minCoverage,
+    rows,
+    usableRows,
+    markets,
+    spanDays,
+    coverage,
+    minBucketMarkets,
+    firstCapturedAtMs: firstMs,
+    lastCapturedAtMs: lastMs,
+    buckets: bucketRows,
+    readyForCapacityDistribution: multiStakeCapacityReady({
+      markets,
+      spanDays,
+      coverage,
+      minBucketMarkets,
+    }),
+    addsExternalRequests: false,
+    strategyCoupling: false,
+    verdictCoupling: false,
+    executionCapability: false,
   };
 }

@@ -61,6 +61,15 @@ export const polymarketStateSnapshots = pgTable(
     upFill5: doublePrecision("up_fill_5"),
     downFill5: doublePrecision("down_fill_5"),
 
+    // Prospective multi-stake capacity tape v1. These are fee-adjusted effective VWAPs from walking
+    // the exact same public books already fetched for the $5 state-tape fill; no extra API request is
+    // made. Null means the registered boundary has not begun or that side lacked sufficient depth.
+    capacityVersion: text("capacity_version"),
+    upFill10: doublePrecision("up_fill_10"),
+    downFill10: doublePrecision("down_fill_10"),
+    upFill20: doublePrecision("up_fill_20"),
+    downFill20: doublePrecision("down_fill_20"),
+
     // Prospective microstructure tape v1 (KB polymarket-microstructure-tape-v1). These remain null
     // before its registered boundary and are raw observations only — no current bot reads them.
     upBidSize: doublePrecision("up_bid_size"),

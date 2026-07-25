@@ -309,6 +309,13 @@
       "when": 1784970180200,
       "tag": "0043_flippant_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1785007779597,
+      "tag": "0044_sparkling_champions",
+      "breakpoints": true
     }
   ]
 }
