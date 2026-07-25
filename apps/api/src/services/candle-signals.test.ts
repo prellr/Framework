@@ -6,6 +6,7 @@ import {
   idNr4BreakoutEligibleHorizon,
   idNr4BreakoutSignal,
   ID_NR4_BREAKOUT,
+  ID_NR4_BREAKOUT_QUALITY_TAPE,
   stochAdxEligibleHorizon,
   stochAdxSnapbackSignal,
   STOCH_ADX_SNAPBACK,
@@ -210,4 +211,43 @@ test("ID/NR4 preserves the preregistered boundary and 5m-only universe", () => {
   assert.equal(idNr4BreakoutEligibleHorizon(15), false);
   assert.equal(idNr4BreakoutEligibleHorizon(60), false);
   assert.equal(idNr4BreakoutSignal(idNr4Bars().slice(1), 105, 1_230_000, 1_260_000), null);
+});
+
+test("ID/NR4 quality coordinates begin only at the future tape boundary and are direction invariant", () => {
+  const windowStartMs = ID_NR4_BREAKOUT_QUALITY_TAPE.evalStartMs;
+  const preWindowStartMs = windowStartMs - ID_NR4_BREAKOUT.barMs;
+  const preShiftMs = preWindowStartMs - 1_200_000;
+  const preBoundary = idNr4BreakoutSignal(
+    idNr4Bars().map((bar) => ({ ...bar, t: bar.t + preShiftMs })),
+    105,
+    preWindowStartMs + 30_000,
+    preWindowStartMs + 60_000,
+  );
+  assert.ok(preBoundary);
+  assert.equal(preBoundary.quality, undefined);
+
+  const shiftMs = windowStartMs - 1_200_000;
+  const shifted = idNr4Bars().map((bar) => ({ ...bar, t: bar.t + shiftMs }));
+  const long = idNr4BreakoutSignal(
+    shifted,
+    105,
+    windowStartMs + 30_000,
+    windowStartMs + 60_000,
+  );
+  const short = idNr4BreakoutSignal(
+    shifted,
+    95,
+    windowStartMs + 30_000,
+    windowStartMs + 60_000,
+  );
+  assert.deepEqual(long?.quality, {
+    version: "updown-id-nr4-breakout-quality-tape-v1",
+    setupRangeBps: 800,
+    rangeCompression: 8 / 9,
+    insideRangeRatio: 8 / 12,
+    absoluteCloseLocation: 0.5,
+    breakoutExtension: 1 / 8,
+    relativeVolume: 1,
+  });
+  assert.deepEqual(short?.quality, long?.quality);
 });

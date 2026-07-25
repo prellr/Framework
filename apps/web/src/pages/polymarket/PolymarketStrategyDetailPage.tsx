@@ -209,6 +209,17 @@ export function PolymarketStrategyDetailPage() {
     setFeedSort((current) => nextSortState(current, key, initialDirection));
   const wins = cohort?.wins ?? 0;
   const losses = cohort?.losses ?? 0;
+  const observedLedgerDates = new Set(
+    scoped.dailyLedger.rows
+      .filter((row) =>
+        row.botKey === botKey
+        && row.horizonMin === horizonMin
+        && selectedAssets.includes(row.pair.replace("-USD", "") as AssetKey)
+      )
+      .map((row) => row.day),
+  ).size;
+  const gateSpanDays = selectedGate?.spanDays ?? 0;
+  const sliceLabel = period === "all" ? "selected scope" : `${period} slice`;
 
   return (
     <div className="space-y-5">
@@ -273,7 +284,13 @@ export function PolymarketStrategyDetailPage() {
         <Metric label="Graded" value={`${wins}W / ${losses}L`} sub={pct(cohort?.winRate)} />
         <Metric label="Net / bet" value={usd(cohort?.netPerBet)} tone={Number(cohort?.netPerBet) > 0 ? "good" : Number(cohort?.netPerBet) < 0 ? "bad" : "neutral"} />
         <Metric label="Vs control" value={cohort?.residualPerBet == null ? "—" : `${cohort.residualPerBet >= 0 ? "+" : ""}${(cohort.residualPerBet * 100).toFixed(1)}¢`} tone={Number(cohort?.residualPerBet) > 0 ? "good" : Number(cohort?.residualPerBet) < 0 ? "bad" : "neutral"} />
-        <Metric label="Active days" value={String(cohort?.activeDays ?? 0)} sub={selectedGate ? `familywise gate: ${selectedGate.state}` : `${family.short} · ${meta.origin}`} />
+        <Metric
+          label="Observed ledger dates"
+          value={String(observedLedgerDates)}
+          sub={selectedGate
+            ? `${cohort?.activeDays ?? 0} in ${sliceLabel} · gate ${gateSpanDays.toFixed(2)}d / ${selectedGate.state}`
+            : `${cohort?.activeDays ?? 0} in ${sliceLabel} · ${family.short} · ${meta.origin}`}
+        />
       </div>
 
       <PolymarketDailyRawLedger

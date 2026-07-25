@@ -245,6 +245,10 @@ export function PolymarketStrategyLab() {
       refetchInterval: 15 * 60_000,
     },
   );
+  const idNr4Quality = trpc.polymarket.idNr4QualityDistributionAudit.useQuery(undefined, {
+    staleTime: 15 * 60_000,
+    refetchInterval: 15 * 60_000,
+  });
   const tradeFlow = trpc.polymarket.authoritativeTradeFlowTape.useQuery(undefined, {
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
@@ -292,6 +296,7 @@ export function PolymarketStrategyLab() {
     micro.isLoading,
     venue.isLoading,
     basisDistribution.isLoading,
+    idNr4Quality.isLoading,
     tradeFlow.isLoading,
     hyperliquidFlow.isLoading,
     clobEventOfi.isLoading,
@@ -342,6 +347,7 @@ export function PolymarketStrategyLab() {
       { key: "microstructure", error: micro.isError },
       { key: "venue", error: venue.isError },
       { key: "basisDistribution", error: basisDistribution.isError },
+      { key: "idNr4Quality", error: idNr4Quality.isError },
       { key: "tradeFlow", error: tradeFlow.isError },
       { key: "hyperliquidFlow", error: hyperliquidFlow.isError },
       { key: "clobEventOfi", error: clobEventOfi.isError },
@@ -429,6 +435,35 @@ export function PolymarketStrategyLab() {
         note: d.report
           ? "The six pair-level reports are outcome-free. No threshold, direction, or strategy follows automatically; the hashed updown-resolution-source-basis-feature-cuts-v1 artifact and separate future 5m/15m registrations are still required."
           : "The exact basis, one-second change, five-second sign-persistence, and source-age quantiles are preregistered. Their query cannot run until all six pairs pass the original tape floor; a separate guarded freeze will then create updown-resolution-source-basis-feature-cuts-v1, while gaps remain null and Server2 caches the report for 15 minutes.",
+      });
+    }
+    if (idNr4Quality.data) {
+      const d = idNr4Quality.data;
+      const started = Date.now() >= d.evalStartMs;
+      rows.push({
+        key: "id-nr4-quality-distribution",
+        name: "ID/NR4 causal quality distributions",
+        family: "Model audit",
+        version: d.version,
+        source: "Completed 5m setup bars × causal breakout spot",
+        state: !started ? "scheduled" : d.report ? "ready" : "collecting",
+        progress: progress(
+          ratio(d.rows, d.floors.rows),
+          ratio(d.weakestPairMarkets, d.floors.marketsPerPair),
+          ratio(d.spanDays, d.floors.spanDays),
+        ),
+        primary: d.report
+          ? `${d.report.buckets.length} pair distributions unlocked`
+          : `${d.rows.toLocaleString()} / ${d.floors.rows.toLocaleString()} future rows`,
+        secondary: d.report
+          ? `${d.metrics.length} direction-invariant metrics · p10 / p25 / p50 / p75 / p90`
+          : `weakest pair ${d.weakestPairMarkets} / ${d.floors.marketsPerPair} markets · ${d.spanDays.toFixed(2)} / ${d.floors.spanDays}d`,
+        evalStartMs: d.evalStartMs,
+        note: !started
+          ? `Prospective capture begins ${new Date(d.evalStartMs).toLocaleString()}. ID/NR4's existing three-date paper history and current familywise gate continue unchanged; no pre-boundary feature value enters this audit.`
+          : d.report
+            ? "The report contains causal, direction-invariant feature distributions only. Any quality cut or child rule requires a separate immutable artifact and a later forward boundary; this audit cannot alter ID/NR4 v1."
+            : "Setup width, compression, containment, absolute close location, breakout extension, and relative volume are stored on future ID/NR4 decisions. Values stay locked until all six pairs pass the frozen support floors. No new poller, table, paper identity, or execution route exists.",
       });
     }
     if (tradeFlow.data) {
@@ -837,6 +872,7 @@ export function PolymarketStrategyLab() {
   }, [
     absorption,
     basisDistribution,
+    idNr4Quality,
     bundles,
     calibration,
     completeSet,

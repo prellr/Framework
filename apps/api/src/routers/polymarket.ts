@@ -33,6 +33,7 @@ import { polymarketShadowConnectorAudit } from "../services/polymarket-shadow-co
 import {
   resolutionSourceBasisDistributionAudit,
 } from "../services/resolution-source-basis-distribution.ts";
+import { idNr4QualityDistributionAudit } from "../services/id-nr4-quality-distribution.ts";
 import { z } from "zod";
 import { paperPerformance } from "../services/paper-performance.ts";
 
@@ -108,6 +109,11 @@ export const polymarketRouter = t.router({
   // six pairs pass the inherited venue-tape row/span/block floor.
   resolutionSourceBasisDistributionAudit: protectedProcedure.query(
     () => resolutionSourceBasisDistributionAudit(),
+  ),
+  // Prospective, direction-invariant ID/NR4 feature distributions. Counts are shown first; the
+  // value query remains unreachable until every frozen row/pair/span floor passes.
+  idNr4QualityDistributionAudit: protectedProcedure.query(
+    () => idNr4QualityDistributionAudit(),
   ),
   // Collection progress only: no IV skew/OI sign or directional diagnostic before its frozen floor.
   deribitSkewTape: protectedProcedure.query(() => deribitSkewTapeStatus()),

@@ -79,6 +79,25 @@ export const ID_NR4_BREAKOUT = {
   eligibleHorizonsMin: [5],
 } as const;
 
+/**
+ * Prospective, outcome-blind quality tape for the already-frozen ID/NR4 rule.
+ *
+ * These coordinates are computed from the same four completed setup bars and causal breakout spot
+ * already in memory. They cannot change the v1 side, probability, eligibility, or paper insertion.
+ */
+export const ID_NR4_BREAKOUT_QUALITY_TAPE = {
+  version: "updown-id-nr4-breakout-quality-tape-v1",
+  evalStartMs: Date.parse("2026-07-25T22:00:00.000Z"),
+  metrics: [
+    "setupRangeBps",
+    "rangeCompression",
+    "insideRangeRatio",
+    "absoluteCloseLocation",
+    "breakoutExtension",
+    "relativeVolume",
+  ] as const,
+} as const;
+
 export interface Bar5m { t: number; o: number; h: number; l: number; c: number; v?: number }
 
 /** Aggregate 1m candles to COMPLETED 5m bars (incomplete trailing group dropped). */
@@ -407,6 +426,15 @@ export interface IdNr4BreakoutSignal {
   spotAgeSec: number;
   completedBarAt: number;
   nextWindowStartMs: number;
+  quality?: {
+    version: typeof ID_NR4_BREAKOUT_QUALITY_TAPE.version;
+    setupRangeBps: number;
+    rangeCompression: number;
+    insideRangeRatio: number;
+    absoluteCloseLocation: number;
+    breakoutExtension: number;
+    relativeVolume: number | null;
+  };
 }
 
 export function idNr4BreakoutEligibleHorizon(horizonMin: number): boolean {
@@ -458,6 +486,34 @@ export function idNr4BreakoutSignal(
   const long = spot > latest.h;
   const short = spot < latest.l;
   if (long === short) return null;
+  const previousRanges = ranges.slice(0, -1);
+  const setupMid = (latest.h + latest.l) / 2;
+  const latestCloseLocation = (latest.c - latest.l) / latestRange;
+  const previousVolumes = setup
+    .slice(0, -1)
+    .map((bar) => bar.v)
+    .filter((volume): volume is number => Number.isFinite(volume) && Number(volume) > 0)
+    .sort((left, right) => left - right);
+  const latestVolume = latest.v;
+  const medianPreviousVolume = previousVolumes.length === ID_NR4_BREAKOUT.setupBars - 1
+    ? previousVolumes[1]
+    : null;
+  const quality = nowMs >= ID_NR4_BREAKOUT_QUALITY_TAPE.evalStartMs
+    ? {
+        version: ID_NR4_BREAKOUT_QUALITY_TAPE.version,
+        setupRangeBps: latestRange / setupMid * 10_000,
+        rangeCompression: latestRange / Math.min(...previousRanges),
+        insideRangeRatio: latestRange / (previous.h - previous.l),
+        absoluteCloseLocation: Math.abs(latestCloseLocation - 0.5) * 2,
+        breakoutExtension: (long ? spot - latest.h : latest.l - spot) / latestRange,
+        relativeVolume:
+          medianPreviousVolume != null
+          && Number.isFinite(latestVolume)
+          && Number(latestVolume) >= 0
+            ? Number(latestVolume) / medianPreviousVolume
+            : null,
+      }
+    : undefined;
   return {
     pup: long ? ID_NR4_BREAKOUT.pupLong : ID_NR4_BREAKOUT.pupShort,
     direction: long ? "long" : "short",
@@ -468,5 +524,6 @@ export function idNr4BreakoutSignal(
     spotAgeSec,
     completedBarAt: latest.t,
     nextWindowStartMs,
+    ...(quality ? { quality } : {}),
   };
 }

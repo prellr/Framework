@@ -38,6 +38,7 @@
     "verify:research-worker-contract": "tsx src/scripts/verify-python-research-worker-contract.ts",
     "audit:strategy-timeframe-independence-preregister": "tsx --env-file=../../.env src/scripts/record-strategy-timeframe-independence.ts",
     "audit:strategy-timeframe-independence-record-launch": "tsx --env-file=../../.env src/scripts/record-strategy-timeframe-independence-launch.ts",
+    "audit:id-nr4-quality-distribution-preregister": "tsx --env-file=../../.env src/scripts/record-id-nr4-quality-distribution-v1.ts",
     "audit:pricer-mc-trend-preregister": "tsx --env-file=../../.env src/scripts/record-pricer-mc-trend-v1.ts",
     "audit:pricer-mc-trend-record-launch": "tsx --env-file=../../.env src/scripts/record-pricer-mc-trend-launch.ts",
     "audit:hyperliquid-flow": "tsx --env-file=../../.env src/scripts/inspect-hyperliquid-flow-launch.ts",
