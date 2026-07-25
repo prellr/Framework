@@ -84,9 +84,13 @@ ssh admin@192.168.2.17 '
     --exclude='.codex-*' \
     --exclude=backups \
     --exclude=.ruff_cache \
+    --exclude=.pytest_cache \
+    --exclude=.mypy_cache \
     --exclude=tmp \
     --exclude=.venv \
     --exclude=__pycache__ \
+    --exclude='*.egg-info' \
+    --exclude='*.pyc' \
     --exclude=dist \
     --exclude=.DS_Store \
     -czf "$recovery_dir/source.tgz" .
@@ -101,8 +105,9 @@ ssh admin@192.168.2.17 '
 rsync -azn --delete --itemize-changes \
   --exclude node_modules --exclude .git --exclude .env \
   --exclude '.codex-*' --exclude backups \
-  --exclude .ruff_cache --exclude tmp --exclude .venv \
-  --exclude __pycache__ --exclude dist \
+  --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
+  --exclude tmp --exclude .venv --exclude __pycache__ \
+  --exclude '*.egg-info' --exclude '*.pyc' --exclude dist \
   ./ admin@192.168.2.17:/Users/admin/jester-analytics/
 
 # 5. Sync the repo to the server. In-tree historical recovery material is protected from
@@ -110,8 +115,9 @@ rsync -azn --delete --itemize-changes \
 rsync -az --delete \
   --exclude node_modules --exclude .git --exclude .env \
   --exclude '.codex-*' --exclude backups \
-  --exclude .ruff_cache --exclude tmp --exclude .venv \
-  --exclude __pycache__ --exclude dist \
+  --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
+  --exclude tmp --exclude .venv --exclude __pycache__ \
+  --exclude '*.egg-info' --exclude '*.pyc' --exclude dist \
   ./ admin@192.168.2.17:/Users/admin/jester-analytics/
 ```
 
@@ -160,8 +166,9 @@ tar -xzf "$recovery_dir/source.tgz" -C "$restore_dir"
 rsync -az --delete \
   --exclude .env --exclude .git --exclude node_modules \
   --exclude '.codex-*' --exclude backups \
-  --exclude .ruff_cache --exclude tmp --exclude .venv \
-  --exclude __pycache__ --exclude dist \
+  --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
+  --exclude tmp --exclude .venv --exclude __pycache__ \
+  --exclude '*.egg-info' --exclude '*.pyc' --exclude dist \
   "$restore_dir/" /Users/admin/jester-analytics/
 
 cd /Users/admin/jester-analytics
