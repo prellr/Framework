@@ -103,6 +103,8 @@ test("trade-flow operational health stays separate from readiness and passes a f
     p99IngestionLatencyMs: 8_700,
     slowIngestionEvents: 3,
     oldPendingEvents: 0,
+    overduePendingEvents: 0,
+    retryDeferredPendingEvents: 0,
     oldestPendingAgeSec: 45,
   });
   assert.equal(health.healthy, true);
@@ -120,6 +122,8 @@ test("trade-flow operational health fails closed on stale collection, latency, o
     p99IngestionLatencyMs: TRADE_FLOW_OPERATIONAL_HEALTH.maxP99IngestionMs + 1,
     slowIngestionEvents: 20,
     oldPendingEvents: 1,
+    overduePendingEvents: 1,
+    retryDeferredPendingEvents: 0,
     oldestPendingAgeSec: TRADE_FLOW_OPERATIONAL_HEALTH.pendingAgeWarningSec + 1,
   });
   assert.equal(health.healthy, false);
@@ -136,6 +140,8 @@ test("trade-flow operational health rejects missing or malformed telemetry", () 
     p99IngestionLatencyMs: null,
     slowIngestionEvents: -1,
     oldPendingEvents: -1,
+    overduePendingEvents: -1,
+    retryDeferredPendingEvents: -1,
     oldestPendingAgeSec: -1,
   });
   assert.equal(health.healthy, false);
@@ -144,4 +150,22 @@ test("trade-flow operational health rejects missing or malformed telemetry", () 
   assert.equal(health.p99IngestionLatencyMs, null);
   assert.equal(health.recentRawEvents, 0);
   assert.equal(health.oldPendingEvents, 0);
+});
+
+test("trade-flow health distinguishes a caught-up verifier from unavailable source receipts", () => {
+  const health = summarizeTradeFlowOperationalHealth({
+    lastEventAgeSec: 2,
+    recentRawEvents: 1_000,
+    p95IngestionLatencyMs: 1_200,
+    p99IngestionLatencyMs: 8_700,
+    slowIngestionEvents: 3,
+    oldPendingEvents: 12,
+    overduePendingEvents: 0,
+    retryDeferredPendingEvents: 12,
+    oldestPendingAgeSec: 4_000,
+  });
+  assert.equal(health.verifierCaughtUp, true);
+  assert.equal(health.sourceReceiptsHealthy, false);
+  assert.equal(health.healthy, false);
+  assert.equal(health.verificationRetryAfterSec, 60);
 });

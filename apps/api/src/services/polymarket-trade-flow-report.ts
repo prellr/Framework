@@ -100,6 +100,8 @@ export function summarizeTradeFlowOperationalHealth(input: {
   p99IngestionLatencyMs: number | null;
   slowIngestionEvents: number;
   oldPendingEvents: number;
+  overduePendingEvents: number;
+  retryDeferredPendingEvents: number;
   oldestPendingAgeSec: number;
 }) {
   const lastEventAgeSec =
@@ -117,6 +119,11 @@ export function summarizeTradeFlowOperationalHealth(input: {
   const recentRawEvents = Math.max(0, Number(input.recentRawEvents) || 0);
   const slowIngestionEvents = Math.max(0, Number(input.slowIngestionEvents) || 0);
   const oldPendingEvents = Math.max(0, Number(input.oldPendingEvents) || 0);
+  const overduePendingEvents = Math.max(0, Number(input.overduePendingEvents) || 0);
+  const retryDeferredPendingEvents = Math.max(
+    0,
+    Number(input.retryDeferredPendingEvents) || 0,
+  );
   const oldestPendingAgeSec = Math.max(0, Number(input.oldestPendingAgeSec) || 0);
   const collectionFresh =
     recentRawEvents > 0 &&
@@ -125,13 +132,22 @@ export function summarizeTradeFlowOperationalHealth(input: {
   const latencyHealthy =
     p99IngestionLatencyMs != null &&
     p99IngestionLatencyMs <= TRADE_FLOW_OPERATIONAL_HEALTH.maxP99IngestionMs;
-  const verifierCaughtUp = oldPendingEvents === 0;
+  // Keep two separate questions visible. A due row means the verifier itself is behind; a
+  // retry-deferred old row means the public source hash is still unavailable. Either remains
+  // fail-closed, but durable backoff must not mislabel source unavailability as queue starvation.
+  const verifierCaughtUp = overduePendingEvents === 0;
+  const sourceReceiptsHealthy = oldPendingEvents === 0;
 
   return {
-    healthy: collectionFresh && latencyHealthy && verifierCaughtUp,
+    healthy:
+      collectionFresh &&
+      latencyHealthy &&
+      verifierCaughtUp &&
+      sourceReceiptsHealthy,
     collectionFresh,
     latencyHealthy,
     verifierCaughtUp,
+    sourceReceiptsHealthy,
     recentWindowMin: TRADE_FLOW_OPERATIONAL_HEALTH.recentWindowMin,
     recentRawEvents,
     lastEventAgeSec,
@@ -140,8 +156,11 @@ export function summarizeTradeFlowOperationalHealth(input: {
     slowIngestionEvents,
     slowIngestionMs: TRADE_FLOW_OPERATIONAL_HEALTH.slowIngestionMs,
     oldPendingEvents,
+    overduePendingEvents,
+    retryDeferredPendingEvents,
     oldestPendingAgeSec,
     pendingAgeWarningSec: TRADE_FLOW_OPERATIONAL_HEALTH.pendingAgeWarningSec,
+    verificationRetryAfterSec: AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMs / 1_000,
     maxLastEventAgeSec: TRADE_FLOW_OPERATIONAL_HEALTH.maxLastEventAgeSec,
     maxP99IngestionMs: TRADE_FLOW_OPERATIONAL_HEALTH.maxP99IngestionMs,
   };
@@ -275,6 +294,15 @@ async function liveTradeFlowHealth() {
   const recent = sql`${polymarketTradeFlowEvents.eventAt}
     >= statement_timestamp()::timestamp - interval '15 minutes'`;
   const pending = sql`${polymarketTradeFlowEvents.chainStatus} = 'pending'`;
+  const oldPending = sql`${polymarketTradeFlowEvents.eventAt}
+    < statement_timestamp()::timestamp
+      - ${TRADE_FLOW_OPERATIONAL_HEALTH.pendingAgeWarningSec} * interval '1 second'`;
+  const retryDue = sql`(
+    ${polymarketTradeFlowEvents.verificationAttemptedAt} is null
+    or ${polymarketTradeFlowEvents.verificationAttemptedAt}
+      < statement_timestamp()::timestamp
+        - ${AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMs} * interval '1 millisecond'
+  )`;
   const [row] = await db
     .select({
       pendingEvents: sql<number>`count(*) filter (where ${pending})::int`,
@@ -296,9 +324,17 @@ async function liveTradeFlowHealth() {
       )::int`,
       oldPendingEvents: sql<number>`count(*) filter (
         where ${pending}
-          and ${polymarketTradeFlowEvents.eventAt}
-            < statement_timestamp()::timestamp
-              - interval '180 seconds'
+          and ${oldPending}
+      )::int`,
+      overduePendingEvents: sql<number>`count(*) filter (
+        where ${pending}
+          and ${oldPending}
+          and ${retryDue}
+      )::int`,
+      retryDeferredPendingEvents: sql<number>`count(*) filter (
+        where ${pending}
+          and ${oldPending}
+          and not ${retryDue}
       )::int`,
       oldestPendingAgeSec: sql<number>`coalesce(max(extract(epoch from (
         statement_timestamp()::timestamp - ${polymarketTradeFlowEvents.eventAt}
@@ -343,6 +379,10 @@ export async function authoritativeTradeFlowTapeStatus() {
         : Number(healthSummary.p99IngestionLatencyMs),
     slowIngestionEvents: Number(healthSummary?.slowIngestionEvents ?? 0),
     oldPendingEvents: Number(healthSummary?.oldPendingEvents ?? 0),
+    overduePendingEvents: Number(healthSummary?.overduePendingEvents ?? 0),
+    retryDeferredPendingEvents: Number(
+      healthSummary?.retryDeferredPendingEvents ?? 0,
+    ),
     oldestPendingAgeSec: Number(healthSummary?.oldestPendingAgeSec ?? 0),
   });
   const firstEventAtMs = timeMs(summary?.firstEventAt);

@@ -57,6 +57,11 @@ export const polymarketTradeFlowEvents = pgTable(
     chainShares: doublePrecision("chain_shares"),
     verifiedAt: timestamp("verified_at"),
     verificationError: text("verification_error"),
+    // Receipt lookup state is operational only. It prevents a permanently unavailable public
+    // source hash from monopolizing the oldest-first verifier queue; it cannot affect a strategy,
+    // direction, outcome, or readiness floor.
+    verificationAttempts: integer("verification_attempts").notNull().default(0),
+    verificationAttemptedAt: timestamp("verification_attempted_at"),
 
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { availableParallelism, loadavg } from "node:os";
 import { db, polymarketTradeFlowEvents } from "@framework/db";
-import { and, asc, eq, gte } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import {
   downTokenId,
   fetchCurrentCryptoUpDown,
@@ -66,6 +66,10 @@ export const AUTHORITATIVE_TRADE_FLOW_TAPE = {
   // stream rate (~9.8/s) and below Bor's default JSON-RPC batch-request limit. This does not alter
   // finality, reconciliation, readiness, or any directional field.
   verifyBatch: 200,
+  // A public market-stream hash that does not yet exist on Polygon must yield to fresh rows rather
+  // than remain at the head of the oldest-first queue. The retry clock is durable across restarts.
+  // Receipt status, finality, reconciliation tolerances, and research floors remain unchanged.
+  verifyRetryMs: 60_000,
   // Yield an entire receipt cycle under broad host pressure. Queue age remains visible in the
   // fail-closed health report, so deferral cannot silently pass readiness.
   verifyMaxLoadPerCpu: 0.75,
@@ -175,6 +179,20 @@ export function tradeFlowVerifierLoadPerCpu(load1: number, parallelism: number):
     return Number.POSITIVE_INFINITY;
   }
   return load1 / Math.max(1, Math.floor(parallelism));
+}
+
+/** Pure operational clock used by tests and status explanations; no market fact is inspected. */
+export function tradeFlowVerificationRetryDue(
+  verificationAttemptedAt: Date | string | null,
+  nowMs: number,
+): boolean {
+  if (!Number.isFinite(nowMs)) return false;
+  if (verificationAttemptedAt == null) return true;
+  const attemptedAtMs = verificationAttemptedAt instanceof Date
+    ? verificationAttemptedAt.getTime()
+    : new Date(verificationAttemptedAt).getTime();
+  return Number.isFinite(attemptedAtMs)
+    && nowMs - attemptedAtMs >= AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMs;
 }
 
 /**
@@ -908,6 +926,7 @@ async function verifyPending() {
   let batchRows = 0;
   let batchHashes = 0;
   try {
+    const retryBefore = new Date(startedAt - AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMs);
     const rows = await db
       .select({
         id: polymarketTradeFlowEvents.id,
@@ -922,8 +941,21 @@ async function verifyPending() {
         eq(polymarketTradeFlowEvents.version, AUTHORITATIVE_TRADE_FLOW_TAPE.version),
         eq(polymarketTradeFlowEvents.chainStatus, "pending"),
         gte(polymarketTradeFlowEvents.eventAt, new Date(AUTHORITATIVE_TRADE_FLOW_TAPE.evalStartMs)),
+        or(
+          isNull(polymarketTradeFlowEvents.verificationAttemptedAt),
+          lt(polymarketTradeFlowEvents.verificationAttemptedAt, retryBefore),
+        ),
       ))
-      .orderBy(asc(polymarketTradeFlowEvents.eventAt))
+      // Never-attempted rows are the live lane. Retriable rows rotate by their last lookup time,
+      // so a durable null receipt cannot repeatedly block newly arriving evidence.
+      .orderBy(
+        asc(sql`${polymarketTradeFlowEvents.verificationAttemptedAt} is not null`),
+        asc(sql`coalesce(
+          ${polymarketTradeFlowEvents.verificationAttemptedAt},
+          ${polymarketTradeFlowEvents.eventAt}
+        )`),
+        asc(polymarketTradeFlowEvents.id),
+      )
       .limit(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyBatch);
     const hashes = [...new Set(rows.map((row) => row.transactionHash).filter((hash): hash is string => !!hash))];
     batchRows = rows.length;
@@ -947,7 +979,11 @@ async function verifyPending() {
       );
       await db
         .update(polymarketTradeFlowEvents)
-        .set(reconciliation)
+        .set({
+          ...reconciliation,
+          verificationAttempts: sql`${polymarketTradeFlowEvents.verificationAttempts} + 1`,
+          verificationAttemptedAt: new Date(nowMs),
+        })
         .where(eq(polymarketTradeFlowEvents.id, row.id));
     }
   } catch (error) {
