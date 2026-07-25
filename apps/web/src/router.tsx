@@ -197,15 +197,18 @@ const polymarketStrategyRoute = createRoute({
     scope?: "paper" | "forward" | "history";
     period?: "24h" | "3d" | "7d" | "30d" | "all";
     horizon?: 5 | 15;
+    assets?: string;
   } => {
     const out: {
       scope?: "paper" | "forward" | "history";
       period?: "24h" | "3d" | "7d" | "30d" | "all";
       horizon?: 5 | 15;
+      assets?: string;
     } = {};
     if (search.scope === "paper" || search.scope === "forward" || search.scope === "history") out.scope = search.scope;
     if (search.period === "24h" || search.period === "3d" || search.period === "7d" || search.period === "30d" || search.period === "all") out.period = search.period;
     if (Number(search.horizon) === 5 || Number(search.horizon) === 15) out.horizon = Number(search.horizon) as 5 | 15;
+    if (typeof search.assets === "string" && search.assets.length <= 64) out.assets = search.assets;
     return out;
   },
 });

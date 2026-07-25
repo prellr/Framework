@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  normalizePaperPerformanceAssets,
   paperPerformanceStartMs,
 } from "./paper-performance.ts";
 import {
@@ -21,6 +22,15 @@ test("performance periods never precede the selected ledger scope", () => {
 test("a short period cannot escape a newer forward boundary", () => {
   const now = PAPER_GATE.evalStartMs + 60 * 60_000;
   assert.equal(paperPerformanceStartMs("forward", "24h", now), PAPER_GATE.evalStartMs);
+});
+
+test("multi-asset performance slices are deduplicated and retain the singular asset path", () => {
+  assert.deepEqual(
+    normalizePaperPerformanceAssets({ assets: ["SOL", "BTC", "SOL"] }),
+    ["SOL", "BTC"],
+  );
+  assert.deepEqual(normalizePaperPerformanceAssets({ asset: "ETH" }), ["ETH"]);
+  assert.deepEqual(normalizePaperPerformanceAssets({}), []);
 });
 
 test("segmentation aligns causal macro context and retains repeated-day support", () => {

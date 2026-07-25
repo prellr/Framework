@@ -1575,6 +1575,7 @@ export async function paperStrategyFeed(input: {
   botKey: string;
   horizonMin: 5 | 15;
   scope: PaperFloorScope;
+  assets?: ("BTC" | "ETH" | "SOL" | "XRP" | "DOGE" | "BNB")[];
   limit?: number;
 }) {
   const registered = PAPER_BOTS.some((bot) => bot.key === input.botKey);
@@ -1585,6 +1586,7 @@ export async function paperStrategyFeed(input: {
       ? gte(paperTrades.windowStart, new Date(PAPER_GATE.evalStartMs))
       : sql`true`;
   const limit = Math.max(1, Math.min(200, Math.trunc(input.limit ?? 100)));
+  const selectedPairs = [...new Set(input.assets ?? [])].map((asset) => `${asset}-USD`);
   const rows = await db
     .select({
       id: paperTrades.id,
@@ -1605,6 +1607,7 @@ export async function paperStrategyFeed(input: {
       eq(paperTrades.botKey, input.botKey),
       eq(paperTrades.horizonMin, input.horizonMin),
       scopeCondition,
+      ...(selectedPairs.length ? [inArray(paperTrades.pair, selectedPairs)] : []),
     ))
     .orderBy(desc(paperTrades.decidedAt))
     .limit(limit);
@@ -1769,6 +1772,7 @@ async function loadFloorState() {
     with graded as (
       select
         ${paperTrades.botKey} as bot_key,
+        ${paperTrades.pair} as pair,
         ${paperTrades.horizonMin} as horizon_min,
         ${paperTrades.windowStart} as window_start,
         (
@@ -1785,6 +1789,7 @@ async function loadFloorState() {
       select
         scope_name,
         bot_key,
+        pair,
         horizon_min,
         calendar_day,
         pnl_usd
@@ -1800,13 +1805,14 @@ async function loadFloorState() {
     select
       scope_name,
       bot_key,
+      pair,
       horizon_min,
       calendar_day::text as day,
       count(*)::int as n,
       coalesce(sum(pnl_usd), 0)::double precision as raw
     from scoped
-    group by scope_name, bot_key, horizon_min, calendar_day
-    order by calendar_day, bot_key, horizon_min, scope_name
+    group by scope_name, bot_key, pair, horizon_min, calendar_day
+    order by calendar_day, bot_key, pair, horizon_min, scope_name
   `);
   /**
    * One outcome observation per market, sourced from the universal Always Down control. Using the
@@ -2021,6 +2027,7 @@ async function loadFloorState() {
   type DailyLedgerRow = {
     scope_name: string;
     bot_key: string;
+    pair: string;
     horizon_min: number | string;
     day: string;
     n: number | string;
@@ -2138,6 +2145,10 @@ async function loadFloorState() {
       pnl: number;
       profitStress: number;
       openNow: number;
+      openUsd: number;
+      todayN: number;
+      todayPnl: number;
+      lastDecisionAtMs: number | null;
     };
     const comboMap = new Map<string, Combo>();
     for (const row of summaryRows) {
@@ -2151,9 +2162,19 @@ async function loadFloorState() {
         pnl: 0,
         profitStress: 0,
         openNow: 0,
+        openUsd: 0,
+        todayN: 0,
+        todayPnl: 0,
+        lastDecisionAtMs: null,
       };
+      combo.lastDecisionAtMs = Math.max(
+        combo.lastDecisionAtMs ?? Number.NEGATIVE_INFINITY,
+        timeMs(row.lastDecision),
+      );
       if (row.status === "won" || row.status === "lost") {
         combo.n += num(row.n);
+        combo.todayN += num(row.todayN);
+        combo.todayPnl += num(row.todayPnl);
         if (row.status === "won") {
           combo.wins += num(row.n);
           combo.pnl += num(row.pnl);
@@ -2162,10 +2183,20 @@ async function loadFloorState() {
           combo.pnl += num(row.pnl);
           combo.profitStress += num(row.pnl);
         }
-      } else if (row.status === "open") combo.openNow += num(row.n);
+      } else if (row.status === "open") {
+        combo.openNow += num(row.n);
+        combo.openUsd += num(row.size);
+      }
       comboMap.set(key, combo);
     }
-    const combos = [...comboMap.values()].map((combo) => ({ ...combo, avg: combo.n ? combo.pnl / combo.n : 0, winRate: combo.n ? combo.wins / combo.n : null }));
+    const combos = [...comboMap.values()].map((combo) => ({
+      ...combo,
+      avg: combo.n ? combo.pnl / combo.n : 0,
+      winRate: combo.n ? combo.wins / combo.n : null,
+      lastDecisionAgoSec: combo.lastDecisionAtMs == null
+        ? null
+        : Math.max(0, Math.round((now - combo.lastDecisionAtMs) / 1_000)),
+    }));
     const tapeByBucket = new Map(
       marketTapeRows
         .filter((row) => row.scope_name === scopeName)
@@ -2192,6 +2223,7 @@ async function loadFloorState() {
         .filter((row) => row.scope_name === scopeName)
         .map((row) => ({
           botKey: row.bot_key,
+          pair: row.pair,
           horizonMin: Number(row.horizon_min),
           day: row.day,
           n: num(row.n),

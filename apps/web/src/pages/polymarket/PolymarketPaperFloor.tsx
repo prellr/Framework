@@ -43,6 +43,21 @@ type FloorBot = {
   buckets: { pair: string; horizonMin: number; n: number; wins: number; pnl: number; openNow: number }[];
 };
 type Bucket = FloorBot["buckets"][number];
+type FloorCombo = {
+  botKey: string;
+  pair: string;
+  horizonMin: number;
+  n: number;
+  wins: number;
+  pnl: number;
+  profitStress: number;
+  openNow: number;
+  openUsd: number;
+  todayN: number;
+  todayPnl: number;
+  lastDecisionAgoSec: number | null;
+};
+type CardHorizon = "all" | 5 | 15;
 type FeedSortKey = "time" | "bot" | "market" | "side" | "p" | "ask" | "edge" | "size" | "pnl" | "status";
 
 /** Success metrics the floor can rank/filter by — a data list so new lenses are one-line adds. */
@@ -53,6 +68,36 @@ const METRICS: { key: string; label: string; value: (b: FloorBot) => number; fmt
   { key: "avg", label: "Net/bet", value: (b) => (b.wins + b.losses ? b.pnlAll / (b.wins + b.losses) : -Infinity), fmt: (b) => (b.wins + b.losses ? usd(b.pnlAll / (b.wins + b.losses)) : "—") },
   { key: "today", label: "Today $", value: (b) => b.pnlToday, fmt: (b) => usd(b.pnlToday) },
 ];
+
+export function scopeFloorBotForCards(
+  bot: FloorBot,
+  combos: FloorCombo[],
+  horizon: CardHorizon,
+): FloorBot {
+  if (horizon === "all") return bot;
+  const selected = combos.filter(
+    (combo) => combo.botKey === bot.key && combo.horizonMin === horizon,
+  );
+  const n = selected.reduce((sum, combo) => sum + combo.n, 0);
+  const wins = selected.reduce((sum, combo) => sum + combo.wins, 0);
+  const decisionAges = selected
+    .map((combo) => combo.lastDecisionAgoSec)
+    .filter((age): age is number => age != null);
+  return {
+    ...bot,
+    tradesToday: selected.reduce((sum, combo) => sum + combo.todayN, 0),
+    pnlToday: selected.reduce((sum, combo) => sum + combo.todayPnl, 0),
+    openNow: selected.reduce((sum, combo) => sum + combo.openNow, 0),
+    openUsd: selected.reduce((sum, combo) => sum + combo.openUsd, 0),
+    wins,
+    losses: Math.max(0, n - wins),
+    pnlAll: selected.reduce((sum, combo) => sum + combo.pnl, 0),
+    profitStressAll: selected.reduce((sum, combo) => sum + combo.profitStress, 0),
+    lastDecisionAgoSec: decisionAges.length ? Math.min(...decisionAges) : null,
+    overlapVsFade: null,
+    buckets: bot.buckets.filter((bucket) => bucket.horizonMin === horizon),
+  };
+}
 
 export function PolymarketPaperFloor() {
   const [scope, setScope] = useState<"paper" | "forward" | "history">(() => {
@@ -79,6 +124,10 @@ export function PolymarketPaperFloor() {
   const [segmentSort, setSegmentSort] = useState<SortState<string>>({ key: "bot", direction: "asc" });
   const [feedSort, setFeedSort] = useState<SortState<FeedSortKey>>({ key: "time", direction: "desc" });
   const [gateCollapsed, setGateCollapsed] = useState(() => localStorage.getItem("floor.gateCollapsed") === "true");
+  const [cardHorizon, setCardHorizon] = useState<CardHorizon>(() => {
+    const saved = localStorage.getItem("floor.cardHorizon");
+    return saved === "5" ? 5 : saved === "15" ? 15 : "all";
+  });
   const response = q.data;
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading floor…</p>;
@@ -111,6 +160,10 @@ export function PolymarketPaperFloor() {
     setHiddenPersist(next);
   };
   const setMetricPersist = (m: string) => { setMetric(m); localStorage.setItem("floor.metric", m); };
+  const setCardHorizonPersist = (next: CardHorizon) => {
+    setCardHorizon(next);
+    localStorage.setItem("floor.cardHorizon", String(next));
+  };
   const toggleGate = () => setGateCollapsed((current) => {
     const next = !current;
     localStorage.setItem("floor.gateCollapsed", String(next));
@@ -127,7 +180,16 @@ export function PolymarketPaperFloor() {
   // whole-bot-only metrics). For rate metrics, qualified buckets (≥5 graded) rank above small-n noise
   // so a 100%-on-1-trade cell can't top the card.
   const visibleBots = (d.bots as FloorBot[]).filter((b) => !hidden.has(b.key));
-  const rankedBots = [...visibleBots].sort((a, b) => activeMetric.value(b) - activeMetric.value(a));
+  const overviewBots = [...visibleBots].sort((a, b) => activeMetric.value(b) - activeMetric.value(a));
+  const cardBots = visibleBots
+    .filter((bot) =>
+      cardHorizon === "all"
+      || bot.buckets.some((bucket) => bucket.horizonMin === cardHorizon)
+    )
+    .map((bot) =>
+      scopeFloorBotForCards(bot, (d.combos ?? []) as FloorCombo[], cardHorizon)
+    );
+  const rankedBots = [...cardBots].sort((a, b) => activeMetric.value(b) - activeMetric.value(a));
   const metricEqual = (a: number, b: number) => a === b || (Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 1e-9);
   const ranked = rankedBots.map((bot, index, all) => ({
     bot,
@@ -183,7 +245,7 @@ export function PolymarketPaperFloor() {
     : 0;
   const scrubT = equityTimes[scrubIndex] ?? 0;
   const equityBotKeys = new Set(eq.map((point) => point.bot));
-  const chartBots = rankedBots.filter((bot) => isVisible(bot.key) && equityBotKeys.has(bot.key));
+  const chartBots = overviewBots.filter((bot) => isVisible(bot.key) && equityBotKeys.has(bot.key));
   const isEquityVisible = (key: string) => isVisible(key) && !equityHidden.has(key);
   const t0 = eq.length ? eq[0].t : 0, t1 = eq.length ? eq[eq.length - 1].t : 1;
   const allV = eq.filter((p) => isEquityVisible(p.bot)).flatMap((p) => [p.raw, p.profitStress]);
@@ -467,6 +529,24 @@ export function PolymarketPaperFloor() {
           <button onClick={() => setHiddenPersist(new Set(d.bots.map((b) => b.key)))} className="rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground">none</button>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-muted-foreground">Cards:</span>
+          {([["all", "All"], [5, "5m"], [15, "15m"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              data-testid={`card-horizon-${key}`}
+              aria-pressed={cardHorizon === key}
+              onClick={() => setCardHorizonPersist(key)}
+              className={"rounded border px-1.5 py-0.5 transition-colors " + (cardHorizon === key ? "border-foreground/30 bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="ml-1 text-[11px] text-muted-foreground">
+            totals, ranking, and bucket rows
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="mr-1 text-muted-foreground">Rank by:</span>
           {METRICS.map((m) => (
             <button
@@ -494,13 +574,18 @@ export function PolymarketPaperFloor() {
                 <Link
                   to="/polymarket/strategy/$botKey"
                   params={{ botKey: b.key }}
-                  search={{ scope }}
+                  search={cardHorizon === "all" ? { scope } : { scope, horizon: cardHorizon }}
                   className="min-w-0 hover:text-primary hover:underline"
                   title={`Open ${b.name} evidence page`}
                 >
                   {b.name}
                 </Link>
                 <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium text-muted-foreground">paper</span>
+                {cardHorizon !== "all" && (
+                  <span className="rounded border px-1 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {cardHorizon}m
+                  </span>
+                )}
                 <span className="ml-auto inline-flex items-center gap-1 rounded bg-muted/60 px-1 py-0.5 text-[10px] text-muted-foreground" title="Live execution is not built. It requires a verdict-gate PASS and a separate human decision — nothing on this page can place an order."><Lock className="h-2.5 w-2.5" />live</span>
                 <button
                   type="button"
@@ -538,7 +623,7 @@ export function PolymarketPaperFloor() {
               </dl>
               {b.buckets.length > 0 && (
                 <PaperFloorBucketTable
-                  key={`${b.key}:${metric}`}
+                  key={`${b.key}:${metric}:${cardHorizon}`}
                   buckets={b.buckets}
                   scope={scope}
                   initialMetric={metric}
@@ -547,9 +632,14 @@ export function PolymarketPaperFloor() {
             </CardContent>
           </Card>
         ))}
+        {!ranked.length && (
+          <div className="col-span-full rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            No visible strategies are registered for the selected {cardHorizon === "all" ? "" : `${cardHorizon}m `}card scope.
+          </div>
+        )}
       </div>
 
-      <PolymarketDailyRawLedger ledger={d.dailyLedger} bots={rankedBots} />
+      <PolymarketDailyRawLedger ledger={d.dailyLedger} bots={overviewBots} />
 
       {/* Equity curves */}
       <Card>
@@ -678,7 +768,7 @@ export function PolymarketPaperFloor() {
             const cellP = new Map(seg.byPair.map((c) => [`${c.bot}|${c.pair}`, c]));
             const cellH = new Map(seg.byHorizon.map((c) => [`${c.bot}|${c.horizonMin}`, c]));
             const segmentRows = stableSortRows(
-              rankedBots.filter((b) => seg.byPair.some((c) => c.bot === b.key)),
+              overviewBots.filter((b) => seg.byPair.some((c) => c.bot === b.key)),
               (bot) => segmentSort.key === "bot"
                 ? bot.name
                 : segmentSort.key.startsWith("pair:")

@@ -907,6 +907,10 @@ export function PolymarketStrategyLab() {
         state: "control",
       })),
   ];
+  const splitPopulated = response.familywiseGate.hypotheses.filter(
+    (gate) => gate.markets > 0 || gate.decisions > 0 || gate.bets > 0,
+  ).length;
+  const splitCollectionStarted = Date.now() >= response.familywiseGate.constants.evalStartMs;
   const registryRows = (registryView === "split" ? splitRows : pooledRows).filter(
     ({ bot }) => family === "all" || strategyMeta(bot.key).family === family,
   );
@@ -1161,6 +1165,24 @@ export function PolymarketStrategyLab() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
+          {registryView === "split" && (
+            <div
+              data-testid="split-registry-collection-state"
+              className={`border-b px-4 py-2.5 text-xs ${
+                !splitCollectionStarted
+                  ? "border-warning/30 bg-warning/5 text-warning"
+                  : splitPopulated === 0
+                    ? "border-destructive/30 bg-destructive/5 text-destructive"
+                    : "bg-success/5 text-muted-foreground"
+              }`}
+            >
+              {!splitCollectionStarted
+                ? `Prospective split collection has not started. The frozen boundary opens ${new Date(response.familywiseGate.constants.evalStartMs).toLocaleString()}; zeros before that time are expected and are not missing history.`
+                : splitPopulated === 0
+                  ? `No post-boundary split evidence has been recorded since ${new Date(response.familywiseGate.constants.evalStartMs).toLocaleString()}. Treat this as an operational collection warning, not a zero-performance result.`
+                  : `Post-boundary split collection is active. ${splitPopulated}/${response.familywiseGate.familySize} frozen strategy × timeframe cohorts currently contain market, capture, or grade observations.`}
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1040px] text-sm tabular-nums">
               <thead>

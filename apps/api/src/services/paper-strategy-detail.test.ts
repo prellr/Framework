@@ -30,6 +30,10 @@ const strategyLabPage = readFileSync(
   new URL("../../../web/src/pages/polymarket/PolymarketStrategyLab.tsx", import.meta.url),
   "utf8",
 );
+const dailyRawPage = readFileSync(
+  new URL("../../../web/src/pages/polymarket/PolymarketDailyRawLedger.tsx", import.meta.url),
+  "utf8",
+);
 
 test("every paper strategy has a routeable evidence-only detail surface", () => {
   assert.match(webRouter, /path:\s*"\/polymarket\/strategy\/\$botKey"/);
@@ -41,6 +45,10 @@ test("every paper strategy has a routeable evidence-only detail surface", () => 
   assert.match(scoreboardPage, /to="\/polymarket\/strategy\/\$botKey"/);
   assert.match(scoreboardPage, /title="Daily RAW trend"/);
   assert.match(strategyLabPage, /to="\/polymarket\/strategy\/\$botKey"/);
+  assert.match(detailPage, /label="Assets"/);
+  assert.match(detailPage, /assets:\s*selectedAssetQuery/);
+  assert.match(detailPage, /assets=\{selectedAssets\}/);
+  assert.match(dailyRawPage, /row\.pair\.replace\("-USD", ""\)/);
 });
 
 test("strategy detail data remains bounded, read-only, and paper-only", () => {
@@ -52,6 +60,22 @@ test("strategy detail data remains bounded, read-only, and paper-only", () => {
   assert.match(detailPage, /paper only · live locked/);
   assert.match(detailPage, /Execution" value="Locked; no route exists"/);
   assert.doesNotMatch(detailPage, /placeOrder|createOrder|walletPrivateKey|privateKey/);
+});
+
+test("Paper Floor card timeframe controls recompute scoped totals without relabeling pooled values", () => {
+  assert.match(paperFloorPage, /scopeFloorBotForCards/);
+  assert.match(paperFloorPage, /data-testid=\{`card-horizon-\$\{key\}`\}/);
+  assert.match(paperFloorPage, /totals, ranking, and bucket rows/);
+  assert.match(paperFloorPage, /profitStressAll:\s*selected\.reduce/);
+  assert.match(paperFloorPage, /tradesToday:\s*selected\.reduce/);
+  assert.match(paperFloorPage, /openUsd:\s*selected\.reduce/);
+});
+
+test("split registry distinguishes a prospective zero from a collection failure", () => {
+  assert.match(strategyLabPage, /split-registry-collection-state/);
+  assert.match(strategyLabPage, /Prospective split collection has not started/);
+  assert.match(strategyLabPage, /operational collection warning/);
+  assert.match(strategyLabPage, /Post-boundary split collection is active/);
 });
 
 test("daily RAW evidence uses grade-time Chicago days and never claims portfolio additivity", () => {

@@ -21,6 +21,7 @@ import { FAMILY_META, strategyMeta } from "./polymarket-strategy-meta";
 type ScopeKey = "paper" | "forward" | "history";
 type PeriodKey = "24h" | "3d" | "7d" | "30d" | "all";
 type HorizonKey = 5 | 15;
+type AssetKey = "BTC" | "ETH" | "SOL" | "XRP" | "DOGE" | "BNB";
 type BucketSortKey = "asset" | "n" | "winRate" | "pnl" | "open";
 type FeedSortKey = "time" | "market" | "side" | "ask" | "edge" | "pnl" | "status";
 
@@ -29,6 +30,14 @@ const usd = (value: number | null | undefined) =>
 const pct = (value: number | null | undefined) =>
   value == null ? "—" : `${Math.round(value * 100)}%`;
 const DOW = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const ASSETS: readonly AssetKey[] = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"];
+
+export function parseStrategyAssets(value: string | null | undefined): AssetKey[] {
+  if (!value || value === "all") return [...ASSETS];
+  const requested = new Set(value.split(",").map((asset) => asset.trim().toUpperCase()));
+  const selected = ASSETS.filter((asset) => requested.has(asset));
+  return selected.length ? selected : [...ASSETS];
+}
 
 export function PolymarketStrategyDetailPage() {
   const { botKey } = useParams({ strict: false }) as { botKey: string };
@@ -36,6 +45,7 @@ export function PolymarketStrategyDetailPage() {
     scope?: ScopeKey;
     period?: PeriodKey;
     horizon?: HorizonKey;
+    assets?: string;
   };
   const navigate = useNavigate();
   const scope = search.scope ?? "forward";
@@ -43,6 +53,13 @@ export function PolymarketStrategyDetailPage() {
   const horizon = search.horizon ?? 5;
   const horizonMin = horizon;
   const timezone = "America/Chicago";
+  const assetStorageKey = `strategy.assets.${botKey}`;
+  const selectedAssets = parseStrategyAssets(
+    search.assets ?? localStorage.getItem(assetStorageKey),
+  );
+  const selectedAssetQuery = selectedAssets.length === ASSETS.length
+    ? undefined
+    : selectedAssets;
   const [bucketSort, setBucketSort] = useState<SortState<BucketSortKey>>({
     key: "pnl",
     direction: "desc",
@@ -52,12 +69,37 @@ export function PolymarketStrategyDetailPage() {
     direction: "desc",
   });
 
-  const setSearch = (next: Partial<{ scope: ScopeKey; period: PeriodKey; horizon: HorizonKey }>) =>
+  const setSearch = (next: Partial<{
+    scope: ScopeKey;
+    period: PeriodKey;
+    horizon: HorizonKey;
+    assets: string;
+  }>) =>
     navigate({
       to: "/polymarket/strategy/$botKey",
       params: { botKey },
-      search: { scope, period, horizon, ...next },
+      search: {
+        scope,
+        period,
+        horizon,
+        assets: selectedAssets.length === ASSETS.length ? "all" : selectedAssets.join(","),
+        ...next,
+      },
     });
+  const chooseAssets = (next: AssetKey[]) => {
+    const normalized = ASSETS.filter((asset) => next.includes(asset));
+    if (!normalized.length) return;
+    const encoded = normalized.length === ASSETS.length ? "all" : normalized.join(",");
+    localStorage.setItem(assetStorageKey, encoded);
+    void setSearch({ assets: encoded });
+  };
+  const toggleAsset = (asset: AssetKey) => {
+    chooseAssets(
+      selectedAssets.includes(asset)
+        ? selectedAssets.filter((item) => item !== asset)
+        : [...selectedAssets, asset],
+    );
+  };
 
   const floor = trpc.polymarket.floorView.useQuery({ scope, view: "strategy" }, {
     staleTime: 15_000,
@@ -67,6 +109,7 @@ export function PolymarketStrategyDetailPage() {
     scope,
     period,
     timezone,
+    assets: selectedAssetQuery,
     segmentBotKey: botKey,
     segmentHorizonMin: horizonMin,
   }, {
@@ -77,6 +120,7 @@ export function PolymarketStrategyDetailPage() {
     botKey,
     horizonMin,
     scope,
+    assets: selectedAssetQuery,
     limit: 100,
   }, {
     staleTime: 15_000,
@@ -127,7 +171,10 @@ export function PolymarketStrategyDetailPage() {
         || a.key.localeCompare(b.key),
     );
   };
-  const selectedBuckets = bot.buckets.filter((bucket) => bucket.horizonMin === horizonMin);
+  const selectedBuckets = bot.buckets.filter((bucket) =>
+    bucket.horizonMin === horizonMin
+    && selectedAssets.includes(bucket.pair.replace("-USD", "") as AssetKey)
+  );
   const selectedGate = floor.data.familywiseGate.hypotheses.find(
     (row) => row.key === `${botKey}:${horizonMin}`,
   );
@@ -196,9 +243,27 @@ export function PolymarketStrategyDetailPage() {
             </ControlButton>
           ))}
         </ControlGroup>
+        <ControlGroup label="Assets">
+          <ControlButton
+            active={selectedAssets.length === ASSETS.length}
+            onClick={() => chooseAssets([...ASSETS])}
+          >
+            All
+          </ControlButton>
+          {ASSETS.map((asset) => (
+            <ControlButton
+              key={asset}
+              active={selectedAssets.includes(asset)}
+              onClick={() => toggleAsset(asset)}
+            >
+              {asset}
+            </ControlButton>
+          ))}
+        </ControlGroup>
         <div className="ml-auto text-right text-[11px] text-muted-foreground">
           <div>{scoped.label}</div>
           <div>{scoped.fromMs == null ? "all captured rows" : `from ${new Date(scoped.fromMs).toLocaleString()}`}</div>
+          <div>{selectedAssets.length === ASSETS.length ? "all 6 assets" : selectedAssets.join(", ")} · diagnostic slice</div>
         </div>
       </div>
 
@@ -215,6 +280,7 @@ export function PolymarketStrategyDetailPage() {
         ledger={scoped.dailyLedger}
         bots={[bot]}
         horizonMin={horizonMin}
+        assets={selectedAssets}
         subtitle={`${horizonMin}m realized P&L by Chicago calendar day`}
       />
 
@@ -257,7 +323,7 @@ export function PolymarketStrategyDetailPage() {
             <Definition label="Family" value={family.label} />
             <Definition label="Origin" value={meta.origin} />
             <Definition label="Registered scope" value={meta.scope} />
-            <Definition label="Selected population" value={`${scope} · ${period} · ${horizonMin}m`} />
+            <Definition label="Selected population" value={`${scope} · ${period} · ${horizonMin}m · ${selectedAssets.join(", ")}`} />
             <Definition label="Verdict state" value={selectedGate?.state ?? (meta.family === "control" ? "control" : "waiting")} />
             <Definition label="Execution" value="Locked; no route exists" />
             <p className="sm:col-span-2 text-xs leading-relaxed text-muted-foreground">
@@ -271,7 +337,7 @@ export function PolymarketStrategyDetailPage() {
 
       <Card>
         <CardHeader className="border-b p-4">
-          <CardTitle className="text-base">Segmentation · {horizonMin}m <span className="ml-1 text-xs font-normal text-muted-foreground">{period} · {timezone}</span></CardTitle>
+          <CardTitle className="text-base">Segmentation · {horizonMin}m <span className="ml-1 text-xs font-normal text-muted-foreground">{period} · {selectedAssets.length === ASSETS.length ? "all assets" : selectedAssets.join(", ")} · {timezone}</span></CardTitle>
         </CardHeader>
         <CardContent className="p-4">
           {performance.isLoading ? (
@@ -301,7 +367,7 @@ export function PolymarketStrategyDetailPage() {
 
       <Card>
         <CardHeader className="border-b p-4">
-          <CardTitle className="text-base">Recent {horizonMin}m decisions <span className="ml-1 text-xs font-normal text-muted-foreground">latest 100 rows in the selected scope</span></CardTitle>
+          <CardTitle className="text-base">Recent {horizonMin}m decisions <span className="ml-1 text-xs font-normal text-muted-foreground">latest 100 rows · {selectedAssets.length === ASSETS.length ? "all assets" : selectedAssets.join(", ")}</span></CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -347,7 +413,7 @@ function ControlGroup({ label, children }: { label: string; children: ReactNode 
   return (
     <div>
       <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="flex rounded-md border bg-background p-0.5">{children}</div>
+      <div className="flex flex-wrap rounded-md border bg-background p-0.5">{children}</div>
     </div>
   );
 }

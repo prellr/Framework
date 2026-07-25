@@ -52,6 +52,7 @@ export const polymarketRouter = t.router({
       botKey: z.string().min(1).max(80),
       horizonMin: z.union([z.literal(5), z.literal(15)]),
       scope: z.enum(["paper", "forward", "history"]).default("forward"),
+      assets: z.array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"])).min(1).max(6).optional(),
       limit: z.number().int().min(1).max(200).default(100),
     }))
     .query(({ input }) => paperStrategyFeed(input)),
@@ -72,6 +73,7 @@ export const polymarketRouter = t.router({
       period: z.enum(["24h", "3d", "7d", "30d", "all"]).default("all"),
       timezone: z.string().min(1).max(64).default("America/Chicago"),
       asset: z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]).optional(),
+      assets: z.array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"])).min(1).max(6).optional(),
       segmentBotKey: z.string().min(1).max(80).optional(),
       segmentHorizonMin: z.union([z.literal(5), z.literal(15)]).optional(),
     }))

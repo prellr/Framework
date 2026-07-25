@@ -18,7 +18,7 @@ export type DailyRawLedger = {
   completedDayReviewFloor: number;
   reviewPolicy: string;
   currentDay: string;
-  rows: { botKey: string; horizonMin: number; day: string; n: number; raw: number }[];
+  rows: { botKey: string; pair: string; horizonMin: number; day: string; n: number; raw: number }[];
 };
 
 type LedgerBot = { key: string; name: string; color: string };
@@ -48,12 +48,14 @@ export function PolymarketDailyRawLedger({
   title = "Daily ledger RAW",
   subtitle = "realized P&L by Chicago calendar day",
   horizonMin,
+  assets,
 }: {
   ledger: DailyRawLedger;
   bots: LedgerBot[];
   title?: string;
   subtitle?: string;
   horizonMin?: 5 | 15;
+  assets?: readonly string[];
 }) {
   const [range, setRange] = useState<RangeKey>(() => {
     const saved = localStorage.getItem("floor.dailyRawRange") as RangeKey | null;
@@ -71,8 +73,11 @@ export function PolymarketDailyRawLedger({
   };
 
   const filteredRows = useMemo(
-    () => ledger.rows.filter((row) => horizonMin == null || row.horizonMin === horizonMin),
-    [horizonMin, ledger.rows],
+    () => ledger.rows.filter((row) =>
+      (horizonMin == null || row.horizonMin === horizonMin)
+      && (assets == null || assets.includes(row.pair.replace("-USD", "")))
+    ),
+    [assets, horizonMin, ledger.rows],
   );
   const allDays = useMemo(() => {
     const observed = filteredRows.map((row) => row.day).sort();
@@ -142,6 +147,7 @@ export function PolymarketDailyRawLedger({
             <p className="mt-1 text-[11px] text-muted-foreground">
               {ledger.timeZone} · attributed when the market is graded · selected Paper Floor scope
               {horizonMin ? ` · ${horizonMin}m only` : " · 5m + 15m"}
+              {assets ? ` · ${assets.join(", ")}` : ""}
             </p>
           </div>
           <div className="flex rounded-md border bg-muted/10 p-0.5 text-xs">

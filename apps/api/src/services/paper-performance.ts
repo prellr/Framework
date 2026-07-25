@@ -23,12 +23,14 @@ const PERIOD_MS = {
 
 export type PaperPerformanceScope = "paper" | "forward" | "history";
 export type PaperPerformancePeriod = keyof typeof PERIOD_MS;
+export type PaperPerformanceAsset = "BTC" | "ETH" | "SOL" | "XRP" | "DOGE" | "BNB";
 
 export interface PaperPerformanceInput {
   scope: PaperPerformanceScope;
   period: PaperPerformancePeriod;
   timezone: string;
-  asset?: "BTC" | "ETH" | "SOL" | "XRP" | "DOGE" | "BNB";
+  asset?: PaperPerformanceAsset;
+  assets?: PaperPerformanceAsset[];
   segmentBotKey?: string;
   segmentHorizonMin?: 5 | 15;
 }
@@ -101,12 +103,23 @@ const validTimezone = (timezone: string) => {
 
 const baseCondition = (
   startMs: number | null,
-  asset?: PaperPerformanceInput["asset"],
+  asset?: PaperPerformanceAsset,
+  assets?: PaperPerformanceAsset[],
 ): SQL => and(
   inArray(paperTrades.status, ["won", "lost"]),
   ...(startMs == null ? [] : [gte(paperTrades.windowStart, new Date(startMs))]),
-  ...(asset == null ? [] : [eq(paperTrades.pair, `${asset}-USD`)]),
+  ...(assets?.length
+    ? [inArray(paperTrades.pair, assets.map((item) => `${item}-USD`))]
+    : asset == null
+      ? []
+      : [eq(paperTrades.pair, `${asset}-USD`)]),
 ) as SQL;
+
+export function normalizePaperPerformanceAssets(
+  input: Pick<PaperPerformanceInput, "asset" | "assets">,
+): PaperPerformanceAsset[] {
+  return [...new Set(input.assets?.length ? input.assets : input.asset ? [input.asset] : [])];
+}
 
 const registeredCohorts = () => PAPER_BOTS.flatMap((bot) => {
   const horizons = new Set(
@@ -133,7 +146,8 @@ export async function paperPerformance(
 ) {
   const timezone = validTimezone(input.timezone);
   const fromMs = paperPerformanceStartMs(input.scope, input.period, nowMs);
-  const condition = baseCondition(fromMs, input.asset);
+  const assets = normalizePaperPerformanceAssets(input);
+  const condition = baseCondition(fromMs, input.asset, input.assets);
   const localTime = sql`timezone(${timezone}, ${paperTrades.windowStart} at time zone 'UTC')`;
   const aggregateRows = await db
     .select({
@@ -381,14 +395,15 @@ export async function paperPerformance(
     accounting: PAPER_ACCOUNTING,
     scope: input.scope,
     period: input.period,
-    asset: input.asset ?? null,
+    asset: input.asset ?? (assets.length === 1 ? assets[0] : null),
+    assets,
     timezone,
     fromMs,
     toMs: nowMs,
     authoritative: input.scope === "forward" && input.period === "all",
     note: input.scope === "forward" && input.period === "all"
-      ? input.asset
-        ? `${input.asset} rows are a diagnostic slice; the independent prospective 5m/15m verdict remains pooled over each strategy's registered asset universe.`
+      ? assets.length
+        ? `${assets.join(", ")} rows are a diagnostic slice; the independent prospective 5m/15m verdict remains pooled over each strategy's registered asset universe.`
         : "N and performance retain pooled-gate history for context; the Familywise gate column is the independent prospective 5m/15m verdict."
       : "Filtered periods and segments are diagnostic only and cannot alter a frozen verdict.",
     cohorts,
