@@ -33,6 +33,7 @@ export const AUTHORITATIVE_TRADE_FLOW_TAPE = {
   version: "polymarket-authoritative-taker-flow-tape-v1",
   evalStartMs: 1_784_836_800_000, // 2026-07-23 20:00:00 UTC
   marketWs: "wss://ws-subscriptions-clob.polymarket.com/ws/market",
+  dataApiTrades: "https://data-api.polymarket.com/trades",
   polygonRpc: "https://polygon-bor-rpc.publicnode.com",
   ordersMatchedTopic: "0x174b3811690657c217184f89418266767c87e4805d09680c39fc9c031c0cab7c",
   exchangeAddresses: [
@@ -73,6 +74,16 @@ export const AUTHORITATIVE_TRADE_FLOW_TAPE = {
   verifyInitialDelayMs: 60_000,
   verifyRetryBaseMs: 10 * 60_000,
   verifyRetryMaxMs: 6 * 60 * 60_000,
+  // MATCHED trades can enter Polymarket's documented RETRYING lifecycle and later mine under a
+  // replacement hash. Recovery starts only after the original receipt has already failed one
+  // finalized lookup, and only an exact, unique public execution match can reach reconciliation.
+  replacementLookupDelayMs: 10 * 60_000,
+  replacementWindowSec: 60,
+  // Full-market Data API responses can be large. Four conditions per cycle bounds JSON/network
+  // work far below the 200-row direct receipt lane and lets recovery drain gradually.
+  replacementConditionBatch: 4,
+  replacementCacheMs: 60_000,
+  replacementCacheMaxMarkets: 16,
   // Yield an entire receipt cycle under broad host pressure. Queue age remains visible in the
   // fail-closed health report, so deferral cannot silently pass readiness.
   verifyMaxLoadPerCpu: 0.75,
@@ -358,6 +369,82 @@ function normalizedHash(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const lower = value.toLowerCase();
   return /^0x[0-9a-f]{64}$/.test(lower) ? lower : null;
+}
+
+export interface TradeFlowDataApiTrade {
+  asset?: unknown;
+  side?: unknown;
+  size?: unknown;
+  price?: unknown;
+  timestamp?: unknown;
+  transactionHash?: unknown;
+}
+
+export type TradeFlowReplacementSelection = {
+  status: "source_present" | "unique" | "ambiguous" | "missing";
+  transactionHash: string | null;
+};
+
+/**
+ * Identify a superseding public trade hash without reading an outcome or inferring direction.
+ *
+ * The original stream hash always wins when it is present. Otherwise a replacement must be unique
+ * after exact market/token/side/share matching, the frozen half-tick price tolerance, and a
+ * forward-only one-minute retry window. Ambiguity remains unresolved by construction.
+ */
+export function selectTradeFlowReplacementHash(
+  row: {
+    tokenId: string;
+    reportedSide: "buy" | "sell";
+    price: number;
+    shares: number;
+    eventAt: Date | string;
+    transactionHash: string;
+  },
+  trades: readonly TradeFlowDataApiTrade[],
+): TradeFlowReplacementSelection {
+  const sourceHash = normalizedHash(row.transactionHash);
+  const eventAtMs = row.eventAt instanceof Date
+    ? row.eventAt.getTime()
+    : new Date(row.eventAt).getTime();
+  if (!sourceHash || !Number.isFinite(eventAtMs)) {
+    return { status: "missing", transactionHash: null };
+  }
+  if (
+    trades.some((trade) => normalizedHash(trade.transactionHash) === sourceHash)
+  ) {
+    return { status: "source_present", transactionHash: null };
+  }
+  const eventSec = Math.floor(eventAtMs / 1_000);
+  const hashes = new Set<string>();
+  for (const trade of trades) {
+    const hash = normalizedHash(trade.transactionHash);
+    const side = typeof trade.side === "string" ? trade.side.toLowerCase() : "";
+    const size = finiteNumber(trade.size);
+    const price = finiteNumber(trade.price);
+    const timestamp = finiteNumber(trade.timestamp);
+    if (
+      !hash
+      || hash === sourceHash
+      || String(trade.asset ?? "") !== row.tokenId
+      || side !== row.reportedSide
+      || size == null
+      || Math.abs(size - row.shares) > AUTHORITATIVE_TRADE_FLOW_TAPE.shareTolerance
+      || price == null
+      || Math.abs(price - row.price) > AUTHORITATIVE_TRADE_FLOW_TAPE.priceTolerance
+      || timestamp == null
+      || timestamp < eventSec
+      || timestamp > eventSec + AUTHORITATIVE_TRADE_FLOW_TAPE.replacementWindowSec
+    ) continue;
+    hashes.add(hash);
+  }
+  if (hashes.size === 1) {
+    return { status: "unique", transactionHash: [...hashes][0]! };
+  }
+  return {
+    status: hashes.size > 1 ? "ambiguous" : "missing",
+    transactionHash: null,
+  };
 }
 
 /** Canonical six-asset mapping used only for the frozen trade-flow universe. */
@@ -658,6 +745,10 @@ let lastRefreshErrorLogAt = 0;
 let lastVerifierTelemetryAt = 0;
 let lastLoadDeferralLogAt = 0;
 let lastSocketCloseLogAt = 0;
+const replacementTradeCache = new Map<
+  string,
+  { expiresAtMs: number; trades: TradeFlowDataApiTrade[] }
+>();
 
 function fingerprint(row: ParsedTradeFlowEvent): string {
   return createHash("sha256").update([
@@ -934,6 +1025,42 @@ async function rpcBatch(
   };
 }
 
+async function replacementTrades(
+  conditionId: string,
+  nowMs: number,
+): Promise<TradeFlowDataApiTrade[]> {
+  for (const [key, entry] of replacementTradeCache) {
+    if (entry.expiresAtMs <= nowMs) replacementTradeCache.delete(key);
+  }
+  const cached = replacementTradeCache.get(conditionId);
+  if (cached && cached.expiresAtMs > nowMs) return cached.trades;
+  const url = new URL(AUTHORITATIVE_TRADE_FLOW_TAPE.dataApiTrades);
+  url.searchParams.set("market", conditionId);
+  url.searchParams.set("limit", "10000");
+  url.searchParams.set("takerOnly", "false");
+  const response = await fetch(url, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`Polymarket Data API ${response.status}`);
+  const payload = await response.json() as unknown;
+  if (!Array.isArray(payload)) throw new Error("Polymarket Data API trades malformed");
+  const trades = payload as TradeFlowDataApiTrade[];
+  replacementTradeCache.set(conditionId, {
+    expiresAtMs: nowMs + AUTHORITATIVE_TRADE_FLOW_TAPE.replacementCacheMs,
+    trades,
+  });
+  while (
+    replacementTradeCache.size
+    > AUTHORITATIVE_TRADE_FLOW_TAPE.replacementCacheMaxMarkets
+  ) {
+    const oldest = replacementTradeCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    replacementTradeCache.delete(oldest);
+  }
+  return trades;
+}
+
 async function verifyPending() {
   if (verifying || Date.now() < AUTHORITATIVE_TRADE_FLOW_TAPE.evalStartMs) return;
   const startedAt = Date.now();
@@ -951,6 +1078,8 @@ async function verifyPending() {
   verifying = true;
   let batchRows = 0;
   let batchHashes = 0;
+  let batchReplacementCandidates = 0;
+  let batchReplacementVerified = 0;
   try {
     const firstAttemptBefore = new Date(
       startedAt - AUTHORITATIVE_TRADE_FLOW_TAPE.verifyInitialDelayMs,
@@ -969,11 +1098,14 @@ async function verifyPending() {
     const rows = await db
       .select({
         id: polymarketTradeFlowEvents.id,
+        conditionId: polymarketTradeFlowEvents.conditionId,
         tokenId: polymarketTradeFlowEvents.tokenId,
         reportedSide: polymarketTradeFlowEvents.reportedSide,
         price: polymarketTradeFlowEvents.price,
         shares: polymarketTradeFlowEvents.shares,
+        eventAt: polymarketTradeFlowEvents.eventAt,
         transactionHash: polymarketTradeFlowEvents.transactionHash,
+        verificationAttempts: polymarketTradeFlowEvents.verificationAttempts,
       })
       .from(polymarketTradeFlowEvents)
       .where(and(
@@ -1009,25 +1141,108 @@ async function verifyPending() {
     batchHashes = hashes.length;
     if (!hashes.length) return;
     const configuredRpc = await getSetting("POLYGON_RPC_URL");
-    const { headBlock, receipts } = await rpcBatch(configuredRpc || AUTHORITATIVE_TRADE_FLOW_TAPE.polygonRpc, hashes);
+    const rpcUrl = configuredRpc || AUTHORITATIVE_TRADE_FLOW_TAPE.polygonRpc;
+    const { headBlock, receipts } = await rpcBatch(rpcUrl, hashes);
     const nowMs = Date.now();
+    const replacementEligible = rows.filter((row) =>
+      row.transactionHash
+      && !receipts.get(row.transactionHash)
+      && row.verificationAttempts >= 1
+      && nowMs - row.eventAt.getTime()
+        >= AUTHORITATIVE_TRADE_FLOW_TAPE.replacementLookupDelayMs
+    );
+    const replacementConditions = [
+      ...new Set(replacementEligible.map((row) => row.conditionId)),
+    ].slice(0, AUTHORITATIVE_TRADE_FLOW_TAPE.replacementConditionBatch);
+    const replacementTradesByCondition = new Map<
+      string,
+      TradeFlowDataApiTrade[] | null
+    >();
+    await Promise.all(replacementConditions.map(async (conditionId) => {
+      try {
+        replacementTradesByCondition.set(
+          conditionId,
+          await replacementTrades(conditionId, nowMs),
+        );
+      } catch {
+        // The direct receipt lane must continue even if the secondary public index is unavailable.
+        replacementTradesByCondition.set(conditionId, null);
+      }
+    }));
+    const replacementHashByRow = new Map<number, string>();
+    for (const row of replacementEligible) {
+      const trades = replacementTradesByCondition.get(row.conditionId);
+      if (!trades || !row.transactionHash) continue;
+      const selection = selectTradeFlowReplacementHash({
+        tokenId: row.tokenId,
+        reportedSide: row.reportedSide === "buy" ? "buy" : "sell",
+        price: row.price,
+        shares: row.shares,
+        eventAt: row.eventAt,
+        transactionHash: row.transactionHash,
+      }, trades);
+      if (selection.status === "unique" && selection.transactionHash) {
+        replacementHashByRow.set(row.id, selection.transactionHash);
+      }
+    }
+    const replacementHashes = [...new Set(replacementHashByRow.values())];
+    batchReplacementCandidates = replacementHashByRow.size;
+    let replacementHeadBlock = headBlock;
+    let replacementReceipts = new Map<string, PolygonReceipt | null>();
+    if (replacementHashes.length) {
+      try {
+        const replacementBatch = await rpcBatch(rpcUrl, replacementHashes);
+        replacementHeadBlock = replacementBatch.headBlock;
+        replacementReceipts = replacementBatch.receipts;
+      } catch {
+        // A replacement is never accepted without its own finalized Polygon receipt.
+        replacementReceipts = new Map();
+      }
+    }
     for (const row of rows) {
       if (!row.transactionHash) continue;
-      const reconciliation = reconcileTradeFlowReceipt(
+      const sourceReceipt = receipts.get(row.transactionHash) ?? null;
+      let reconciliation = reconcileTradeFlowReceipt(
         {
           tokenId: row.tokenId,
           reportedSide: row.reportedSide === "buy" ? "buy" : "sell",
           price: row.price,
           shares: row.shares,
         },
-        receipts.get(row.transactionHash) ?? null,
+        sourceReceipt,
         headBlock,
         nowMs,
       );
+      let chainTransactionHash = sourceReceipt ? row.transactionHash : undefined;
+      let verificationMethod = sourceReceipt ? "source_hash" : undefined;
+      const replacementHash = replacementHashByRow.get(row.id);
+      if (!sourceReceipt && replacementHash) {
+        const replacementReconciliation = reconcileTradeFlowReceipt(
+          {
+            tokenId: row.tokenId,
+            reportedSide: row.reportedSide === "buy" ? "buy" : "sell",
+            price: row.price,
+            shares: row.shares,
+          },
+          replacementReceipts.get(replacementHash) ?? null,
+          replacementHeadBlock,
+          nowMs,
+        );
+        // Selection is deliberately only a candidate generator. The official V2 receipt must
+        // independently reconcile every frozen execution fact before the replacement is accepted.
+        if (replacementReconciliation.chainStatus === "verified") {
+          reconciliation = replacementReconciliation;
+          chainTransactionHash = replacementHash;
+          verificationMethod = "data_api_replacement";
+          batchReplacementVerified++;
+        }
+      }
       await db
         .update(polymarketTradeFlowEvents)
         .set({
           ...reconciliation,
+          chainTransactionHash,
+          verificationMethod,
           verificationAttempts: sql`${polymarketTradeFlowEvents.verificationAttempts} + 1`,
           verificationAttemptedAt: new Date(nowMs),
         })
@@ -1048,6 +1263,8 @@ async function verifyPending() {
     ) {
       console.log(
         `[trade-flow-tape] verifier rows=${batchRows} hashes=${batchHashes}`
+        + ` replacement-candidates=${batchReplacementCandidates}`
+        + ` replacement-verified=${batchReplacementVerified}`
         + ` durationMs=${durationMs} loadPerCpu=${loadPerCpu.toFixed(3)}`,
       );
       lastVerifierTelemetryAt = finishedAt;

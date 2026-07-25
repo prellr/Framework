@@ -9,6 +9,7 @@ import {
   mergeTradeFlowMarketMetadata,
   parseTradeFlowEvent,
   reconcileTradeFlowReceipt,
+  selectTradeFlowReplacementHash,
   tradeFlowMarketMetadata,
   tradeFlowPairOfQuestion,
   tradeFlowRpcMethodAllowed,
@@ -114,6 +115,9 @@ test("frozen collector constants preserve the prospective boundary, universe, an
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyInitialDelayMs, 60_000);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryBaseMs, 600_000);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMaxMs, 21_600_000);
+  assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.replacementLookupDelayMs, 600_000);
+  assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.replacementWindowSec, 60);
+  assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.replacementConditionBatch, 4);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyMaxLoadPerCpu, 0.75);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyTelemetryMs, 5 * 60_000);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.staleMarketDataMs, 90_000);
@@ -187,6 +191,60 @@ test("receipt clock waits for finality and durably backs off attempted rows", ()
   assert.equal(tradeFlowVerificationRetryDelayMs(1), 600_000);
   assert.equal(tradeFlowVerificationRetryDelayMs(2), 1_200_000);
   assert.equal(tradeFlowVerificationRetryDelayMs(20), 21_600_000);
+});
+
+test("replacement-hash selection requires a forward-only unique execution match", () => {
+  const row = {
+    tokenId: upToken,
+    reportedSide: "buy" as const,
+    price: 0.6,
+    shares: 5,
+    eventAt: new Date(boundary + 400),
+    transactionHash: txHash,
+  };
+  const replacementA = `0x${"c".repeat(64)}`;
+  const replacementB = `0x${"d".repeat(64)}`;
+  const exact = {
+    asset: upToken,
+    side: "BUY",
+    size: "5",
+    price: "0.604",
+    timestamp: String(Math.floor(boundary / 1_000) + 14),
+    transactionHash: replacementA,
+  };
+
+  assert.deepEqual(selectTradeFlowReplacementHash(row, [exact]), {
+    status: "unique",
+    transactionHash: replacementA,
+  });
+  assert.deepEqual(selectTradeFlowReplacementHash(row, [
+    exact,
+    { ...exact, transactionHash: replacementB },
+  ]), {
+    status: "ambiguous",
+    transactionHash: null,
+  });
+  assert.deepEqual(selectTradeFlowReplacementHash(row, [
+    exact,
+    { ...exact, transactionHash: txHash },
+  ]), {
+    status: "source_present",
+    transactionHash: null,
+  });
+  for (const rejected of [
+    { ...exact, asset: downToken },
+    { ...exact, side: "SELL" },
+    { ...exact, size: "5.000002" },
+    { ...exact, price: "0.606" },
+    { ...exact, timestamp: String(Math.floor(boundary / 1_000) - 1) },
+    { ...exact, timestamp: String(Math.floor(boundary / 1_000) + 61) },
+    { ...exact, transactionHash: "not-a-hash" },
+  ]) {
+    assert.deepEqual(selectTradeFlowReplacementHash(row, [rejected]), {
+      status: "missing",
+      transactionHash: null,
+    });
+  }
 });
 
 test("market stream subscribes to standard trade events without unused custom traffic", () => {
@@ -684,6 +742,31 @@ test("external trade-flow methodology provenance is evidence-blind and non-execu
     /\bpaperTrades\b/,
     /\bpolymarketUpdownScore\b/,
     /\bauthoritativeTradeFlowTapeStatus\b/,
+    /\bplaceOrder\b/,
+    /\bsubmitOrder\b/,
+    /\bcancelOrder\b/,
+    /\bprivateKey\b/,
+  ]) {
+    assert.doesNotMatch(source, prohibited);
+  }
+});
+
+test("retry-lifecycle KB amendment preserves the public, outcome-blind incident evidence", () => {
+  const source = readFileSync(
+    new URL(
+      "../scripts/record-authoritative-trade-flow-retry-lifecycle.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /docs\.polymarket\.com\/trading\/manage-orders/);
+  assert.match(source, /api-reference\/core\/get-trades-for-a-user-or-markets/);
+  assert.match(source, /Fifty-three rows had exactly one replacement/);
+  assert.match(source, /Forty-seven had multiple candidates/);
+  for (const prohibited of [
+    /\bpolymarketTradeFlowEvents\b/,
+    /\bpaperTrades\b/,
+    /\bpolymarketUpdownScore\b/,
     /\bplaceOrder\b/,
     /\bsubmitOrder\b/,
     /\bcancelOrder\b/,

@@ -16,6 +16,7 @@
     "audit:authoritative-trade-flow-receipt": "tsx --env-file=../../.env src/scripts/verify-authoritative-trade-flow-receipt.ts",
     "audit:authoritative-trade-flow-record-launch": "tsx --env-file=../../.env src/scripts/record-authoritative-trade-flow-launch.ts",
     "audit:authoritative-trade-flow-record-research-provenance": "tsx --env-file=../../.env src/scripts/record-authoritative-trade-flow-research-provenance.ts",
+    "audit:authoritative-trade-flow-record-retry-lifecycle": "tsx --env-file=../../.env src/scripts/record-authoritative-trade-flow-retry-lifecycle.ts",
     "audit:authoritative-trade-flow-record-capacity": "tsx --env-file=../../.env src/scripts/record-authoritative-trade-flow-capacity.ts",
     "audit:venue-lead-lag-record-repository-screen": "tsx --env-file=../../.env src/scripts/record-venue-lead-lag-repository-screen.ts",
     "audit:smooth-path-causal-record": "tsx --env-file=../../.env src/scripts/record-smooth-path-causal-v2.ts",

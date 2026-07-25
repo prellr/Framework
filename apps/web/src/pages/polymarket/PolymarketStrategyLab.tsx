@@ -456,7 +456,7 @@ export function PolymarketStrategyLab() {
           ratio(d.hashCoverage, d.floors.hashCoverage),
           ratio(d.chainVerificationRate, d.floors.chainVerificationRate),
         ),
-        primary: `${d.rawEvents.toLocaleString()} / ${d.floors.rawEvents.toLocaleString()} events · ${d.verifiedEvents.toLocaleString()} chain-verified`,
+        primary: `${d.rawEvents.toLocaleString()} / ${d.floors.rawEvents.toLocaleString()} events · ${d.verifiedEvents.toLocaleString()} chain-verified · ${d.replacementVerifiedEvents.toLocaleString()} retry replacements`,
         secondary: `${d.distinctMarkets.toLocaleString()} / ${d.floors.distinctMarkets.toLocaleString()} markets · ${d.spanDays.toFixed(2)} / ${d.floors.spanDays}d · weakest pair ${weakestPairMarkets} / ${d.floors.marketsPerPair}`,
         evalStartMs: d.evalStartMs,
         note:

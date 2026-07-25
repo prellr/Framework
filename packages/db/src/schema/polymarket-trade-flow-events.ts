@@ -46,6 +46,11 @@ export const polymarketTradeFlowEvents = pgTable(
 
     // pending | missing_hash | verified | mismatch | reverted
     chainStatus: text("chain_status").notNull().default("pending"),
+    // Immutable public-stream hash stays in transactionHash. This records the exact receipt hash
+    // that was independently reconciled when Polymarket's retry lifecycle supersedes that source.
+    chainTransactionHash: text("chain_transaction_hash"),
+    // source_hash | data_api_replacement
+    verificationMethod: text("verification_method"),
     chainBlockNumber: bigint("chain_block_number", { mode: "number" }),
     chainConfirmations: integer("chain_confirmations"),
     chainExchange: text("chain_exchange"),
@@ -91,6 +96,11 @@ export const polymarketTradeFlowEvents = pgTable(
     check(
       "pm_trade_flow_chain_status_chk",
       sql`${table.chainStatus} in ('pending','missing_hash','verified','mismatch','reverted')`,
+    ),
+    check(
+      "pm_trade_flow_verification_method_chk",
+      sql`${table.verificationMethod} is null
+        or ${table.verificationMethod} in ('source_hash','data_api_replacement')`,
     ),
     check("pm_trade_flow_chain_side_chk", sql`${table.chainSide} is null or ${table.chainSide} in ('buy','sell')`),
   ],

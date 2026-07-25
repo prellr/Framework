@@ -176,6 +176,7 @@ type CumulativeRollupRow = {
   is_total: number;
   raw_events: number;
   verified_events: number;
+  replacement_verified_events: number;
   missing_hash_events: number;
   mismatch_events: number;
   reverted_events: number;
@@ -199,6 +200,10 @@ async function loadCumulativeTradeFlowStatus() {
           min(pair) as pair,
           count(*)::int as raw_events,
           count(*) filter (where chain_status = 'verified')::int as verified_events,
+          count(*) filter (
+            where chain_status = 'verified'
+              and verification_method = 'data_api_replacement'
+          )::int as replacement_verified_events,
           count(*) filter (where chain_status = 'missing_hash')::int as missing_hash_events,
           count(*) filter (where chain_status = 'mismatch')::int as mismatch_events,
           count(*) filter (where chain_status = 'reverted')::int as reverted_events,
@@ -227,6 +232,7 @@ async function loadCumulativeTradeFlowStatus() {
         grouping(pair)::int as is_total,
         coalesce(sum(raw_events), 0)::int as raw_events,
         coalesce(sum(verified_events), 0)::int as verified_events,
+        coalesce(sum(replacement_verified_events), 0)::int as replacement_verified_events,
         coalesce(sum(missing_hash_events), 0)::int as missing_hash_events,
         coalesce(sum(mismatch_events), 0)::int as mismatch_events,
         coalesce(sum(reverted_events), 0)::int as reverted_events,
@@ -251,6 +257,7 @@ async function loadCumulativeTradeFlowStatus() {
     rawEvents: Number(total.raw_events),
     relationBytes: Number(size.rows[0]?.relation_bytes ?? 0),
     verifiedEvents: Number(total.verified_events),
+    replacementVerifiedEvents: Number(total.replacement_verified_events),
     missingHashEvents: Number(total.missing_hash_events),
     mismatchEvents: Number(total.mismatch_events),
     revertedEvents: Number(total.reverted_events),
@@ -382,6 +389,7 @@ export async function authoritativeTradeFlowTapeStatus() {
   const byPair = new Map(grouped.map((row) => [row.pair, row]));
   const rawEvents = Number(summary?.rawEvents ?? 0);
   const verifiedEvents = Number(summary?.verifiedEvents ?? 0);
+  const replacementVerifiedEvents = Number(summary?.replacementVerifiedEvents ?? 0);
   const pendingEvents = Number(healthSummary?.pendingEvents ?? 0);
   const missingHashEvents = Number(summary?.missingHashEvents ?? 0);
   const mismatchEvents = Number(summary?.mismatchEvents ?? 0);
@@ -461,6 +469,7 @@ export async function authoritativeTradeFlowTapeStatus() {
     readyForOutcomeFreeDistributionAudit: ready,
     rawEvents,
     verifiedEvents,
+    replacementVerifiedEvents,
     pendingEvents,
     missingHashEvents,
     mismatchEvents,
