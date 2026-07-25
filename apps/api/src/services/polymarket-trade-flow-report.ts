@@ -160,7 +160,12 @@ export function summarizeTradeFlowOperationalHealth(input: {
     retryDeferredPendingEvents,
     oldestPendingAgeSec,
     pendingAgeWarningSec: TRADE_FLOW_OPERATIONAL_HEALTH.pendingAgeWarningSec,
-    verificationRetryAfterSec: AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMs / 1_000,
+    verificationInitialDelaySec:
+      AUTHORITATIVE_TRADE_FLOW_TAPE.verifyInitialDelayMs / 1_000,
+    verificationRetryBaseSec:
+      AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryBaseMs / 1_000,
+    verificationRetryMaxSec:
+      AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMaxMs / 1_000,
     maxLastEventAgeSec: TRADE_FLOW_OPERATIONAL_HEALTH.maxLastEventAgeSec,
     maxP99IngestionMs: TRADE_FLOW_OPERATIONAL_HEALTH.maxP99IngestionMs,
   };
@@ -297,11 +302,30 @@ async function liveTradeFlowHealth() {
   const oldPending = sql`${polymarketTradeFlowEvents.eventAt}
     < statement_timestamp()::timestamp
       - ${TRADE_FLOW_OPERATIONAL_HEALTH.pendingAgeWarningSec} * interval '1 second'`;
+  const retryDelayMs = sql`least(
+    ${AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMaxMs},
+    ${AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryBaseMs}
+      * power(
+        2,
+        least(
+          greatest(${polymarketTradeFlowEvents.verificationAttempts} - 1, 0),
+          16
+        )
+      )
+  )`;
   const retryDue = sql`(
-    ${polymarketTradeFlowEvents.verificationAttemptedAt} is null
-    or ${polymarketTradeFlowEvents.verificationAttemptedAt}
-      < statement_timestamp()::timestamp
-        - ${AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMs} * interval '1 millisecond'
+    (
+      ${polymarketTradeFlowEvents.verificationAttemptedAt} is null
+      and ${polymarketTradeFlowEvents.eventAt}
+        < statement_timestamp()::timestamp
+          - ${AUTHORITATIVE_TRADE_FLOW_TAPE.verifyInitialDelayMs}
+            * interval '1 millisecond'
+    )
+    or (
+      ${polymarketTradeFlowEvents.verificationAttemptedAt} is not null
+      and ${polymarketTradeFlowEvents.verificationAttemptedAt}
+        < statement_timestamp()::timestamp - ${retryDelayMs} * interval '1 millisecond'
+    )
   )`;
   const [row] = await db
     .select({

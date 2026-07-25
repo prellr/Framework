@@ -18,7 +18,8 @@ import {
   tradeFlowSocketStaleness,
   tradeFlowSubscriptionFrame,
   tradeFlowVerifierLoadPerCpu,
-  tradeFlowVerificationRetryDue,
+  tradeFlowVerificationDue,
+  tradeFlowVerificationRetryDelayMs,
   type TradeFlowMarketMeta,
 } from "./polymarket-trade-flow-tape.ts";
 
@@ -110,7 +111,9 @@ test("frozen collector constants preserve the prospective boundary, universe, an
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.priceTolerance, 0.005000001);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyMs, 10_000);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyBatch, 200);
-  assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMs, 60_000);
+  assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyInitialDelayMs, 60_000);
+  assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryBaseMs, 600_000);
+  assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyRetryMaxMs, 21_600_000);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyMaxLoadPerCpu, 0.75);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.verifyTelemetryMs, 5 * 60_000);
   assert.equal(AUTHORITATIVE_TRADE_FLOW_TAPE.staleMarketDataMs, 90_000);
@@ -131,19 +134,59 @@ test("receipt verifier load guard normalizes host pressure and fails closed on i
   assert.equal(tradeFlowVerifierLoadPerCpu(1, 0), Number.POSITIVE_INFINITY);
 });
 
-test("receipt retry clock admits new rows immediately and durably backs off attempted rows", () => {
+test("receipt clock waits for finality and durably backs off attempted rows", () => {
   const now = Date.UTC(2026, 6, 25, 7, 0, 0);
-  assert.equal(tradeFlowVerificationRetryDue(null, now), true);
   assert.equal(
-    tradeFlowVerificationRetryDue(new Date(now - 59_999), now),
+    tradeFlowVerificationDue({
+      eventAt: new Date(now - 59_999),
+      verificationAttemptedAt: null,
+      verificationAttempts: 0,
+    }, now),
     false,
   );
   assert.equal(
-    tradeFlowVerificationRetryDue(new Date(now - 60_000).toISOString(), now),
+    tradeFlowVerificationDue({
+      eventAt: new Date(now - 60_000),
+      verificationAttemptedAt: null,
+      verificationAttempts: 0,
+    }, now),
     true,
   );
-  assert.equal(tradeFlowVerificationRetryDue("not-a-date", now), false);
-  assert.equal(tradeFlowVerificationRetryDue(null, Number.NaN), false);
+  assert.equal(
+    tradeFlowVerificationDue({
+      eventAt: new Date(now - 1_000_000),
+      verificationAttemptedAt: new Date(now - 599_999),
+      verificationAttempts: 1,
+    }, now),
+    false,
+  );
+  assert.equal(
+    tradeFlowVerificationDue({
+      eventAt: new Date(now - 1_000_000),
+      verificationAttemptedAt: new Date(now - 600_000).toISOString(),
+      verificationAttempts: 1,
+    }, now),
+    true,
+  );
+  assert.equal(
+    tradeFlowVerificationDue({
+      eventAt: "not-a-date",
+      verificationAttemptedAt: null,
+      verificationAttempts: 0,
+    }, now),
+    false,
+  );
+  assert.equal(
+    tradeFlowVerificationDue({
+      eventAt: new Date(now),
+      verificationAttemptedAt: null,
+      verificationAttempts: 0,
+    }, Number.NaN),
+    false,
+  );
+  assert.equal(tradeFlowVerificationRetryDelayMs(1), 600_000);
+  assert.equal(tradeFlowVerificationRetryDelayMs(2), 1_200_000);
+  assert.equal(tradeFlowVerificationRetryDelayMs(20), 21_600_000);
 });
 
 test("market stream subscribes to standard trade events without unused custom traffic", () => {
@@ -594,7 +637,9 @@ test("collector source has no outcome ledger, Jester client, order, signing, or 
   const source = readFileSync(new URL("./polymarket-trade-flow-tape.ts", import.meta.url), "utf8");
   assert.match(source, /verificationAttemptedAt/);
   assert.match(source, /verificationAttempts/);
-  assert.match(source, /verifyRetryMs/);
+  assert.match(source, /verifyInitialDelayMs/);
+  assert.match(source, /verifyRetryBaseMs/);
+  assert.match(source, /verifyRetryMaxMs/);
   for (const prohibited of [
     /\bpaperTrades\b/,
     /\bpolymarketUpdownScore\b/,

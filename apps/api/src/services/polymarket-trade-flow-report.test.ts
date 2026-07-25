@@ -167,5 +167,7 @@ test("trade-flow health distinguishes a caught-up verifier from unavailable sour
   assert.equal(health.verifierCaughtUp, true);
   assert.equal(health.sourceReceiptsHealthy, false);
   assert.equal(health.healthy, false);
-  assert.equal(health.verificationRetryAfterSec, 60);
+  assert.equal(health.verificationInitialDelaySec, 60);
+  assert.equal(health.verificationRetryBaseSec, 600);
+  assert.equal(health.verificationRetryMaxSec, 21_600);
 });
