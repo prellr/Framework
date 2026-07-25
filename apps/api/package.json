@@ -33,6 +33,7 @@
     "audit:paper-timeframe-gate-preregister": "tsx --env-file=../../.env src/scripts/record-paper-timeframe-gate.ts",
     "audit:paper-timeframe-gate-record-launch": "tsx --env-file=../../.env src/scripts/record-paper-timeframe-gate-launch.ts",
     "audit:paper-familywise-gate-record-launch": "tsx --env-file=../../.env src/scripts/record-paper-familywise-gate-launch.ts",
+    "audit:paper-familywise-gate-record-day-one-checkpoint": "tsx --env-file=../../.env src/scripts/record-paper-familywise-day-one-checkpoint.ts",
     "benchmark:formulaic-scale": "tsx --env-file=../../.env src/scripts/benchmark-formulaic-scale-engine.ts",
     "verify:research-control-plane": "tsx src/scripts/verify-research-control-plane.ts",
     "verify:research-worker-contract": "tsx src/scripts/verify-python-research-worker-contract.ts",
