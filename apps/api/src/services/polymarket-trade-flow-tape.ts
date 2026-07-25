@@ -988,7 +988,8 @@ async function verifyPending() {
           and(
             isNotNull(polymarketTradeFlowEvents.verificationAttemptedAt),
             sql`${polymarketTradeFlowEvents.verificationAttemptedAt}
-              < ${new Date(startedAt)} - ${retryDelayMs} * interval '1 millisecond'`,
+              < statement_timestamp()::timestamp
+                - ${retryDelayMs} * interval '1 millisecond'`,
           ),
         ),
       ))

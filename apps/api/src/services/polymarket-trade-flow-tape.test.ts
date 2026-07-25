@@ -640,6 +640,7 @@ test("collector source has no outcome ledger, Jester client, order, signing, or 
   assert.match(source, /verifyInitialDelayMs/);
   assert.match(source, /verifyRetryBaseMs/);
   assert.match(source, /verifyRetryMaxMs/);
+  assert.match(source, /statement_timestamp\(\)::timestamp/);
   for (const prohibited of [
     /\bpaperTrades\b/,
     /\bpolymarketUpdownScore\b/,
