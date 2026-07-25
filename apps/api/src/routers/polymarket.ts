@@ -20,6 +20,7 @@ import { authoritativeTradeFlowTapeStatus } from "../services/polymarket-trade-f
 import {
   authoritativeTakerFlowDistributionAudit,
 } from "../services/authoritative-taker-flow-distribution-audit.ts";
+import { authoritativeTakerPressureDistributionAudit } from "../services/authoritative-taker-pressure-distribution-audit.ts";
 import { smoothPathFunnelStatus } from "../services/smooth-path-funnel-report.ts";
 import { hyperliquidFlowTapeStatus } from "../services/hyperliquid-flow-report.ts";
 import { clobEventOfiTapeStatus } from "../services/clob-event-ofi-report.ts";
@@ -89,6 +90,11 @@ export const polymarketRouter = t.router({
   // until the inherited seven-day taker-flow gate passes and cannot expose token or trade direction.
   authoritativeTakerFlowDistributionAudit: protectedProcedure.query(
     () => authoritativeTakerFlowDistributionAudit(),
+  ),
+  // One verified first-minute row per market; only unsigned activity/pressure magnitude is exposed.
+  // Chain-confirmed pressure is a proxy-validation reference, not an assumed live decision input.
+  authoritativeTakerPressureDistributionAudit: protectedProcedure.query(() =>
+    authoritativeTakerPressureDistributionAudit(),
   ),
   // Outcome-free basis/change/persistence quantiles. The feature query stays unreachable until all
   // six pairs pass the inherited venue-tape row/span/block floor.
