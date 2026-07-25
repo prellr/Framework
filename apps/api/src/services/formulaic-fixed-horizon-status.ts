@@ -19,6 +19,12 @@ import { HISTORICAL_ALBERT_REPLAY_RECEIPT } from "./historical-albert-replay-rec
 import {
   HISTORICAL_ALBERT_HORIZON_SENSITIVITY_RECEIPT,
 } from "./historical-albert-horizon-sensitivity-receipt.ts";
+import {
+  HISTORICAL_ALBERT_LONG_HORIZON_SENSITIVITY_RECEIPT,
+} from "./historical-albert-long-horizon-sensitivity-receipt.ts";
+import {
+  HISTORICAL_ALBERT_ONE_HOUR_CHART_SENSITIVITY_RECEIPT,
+} from "./historical-albert-one-hour-chart-sensitivity-receipt.ts";
 import { formulaOperatorCatalogStatus } from "./formula-operator-catalog.ts";
 
 const SYNTHETIC_CONFIG = {
@@ -100,6 +106,10 @@ export function formulaLabStatus() {
     historicalReplay: HISTORICAL_ALBERT_REPLAY_RECEIPT,
     historicalHorizonSensitivity:
       HISTORICAL_ALBERT_HORIZON_SENSITIVITY_RECEIPT,
+    historicalLongHorizonSensitivity:
+      HISTORICAL_ALBERT_LONG_HORIZON_SENSITIVITY_RECEIPT,
+    historicalOneHourChartSensitivity:
+      HISTORICAL_ALBERT_ONE_HOUR_CHART_SENSITIVITY_RECEIPT,
     proof: {
       mode: "planted-signal synthetic mechanics test",
       isMarketEvidence: false,

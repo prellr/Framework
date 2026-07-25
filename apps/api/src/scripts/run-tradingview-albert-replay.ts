@@ -30,7 +30,7 @@ const manifestPath =
   process.env.ALCHEMY_TV_MANIFEST_PATH
   ?? path.join(
     datasetDir,
-    "20250804000000000-20260725030459999-455ea5183517-imported-20260725031556411.manifest.json",
+    "20250322105000000-20260725030459999-b15ddf827403-imported-20260725163357278.manifest.json",
   );
 const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
   datasetId: string;

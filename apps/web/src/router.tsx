@@ -237,7 +237,25 @@ const polymarketAssetRoute = createRoute({
 const formulaLabRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/formula-lab",
-  component: FormulaLabPage,
+  component: () => <FormulaLabPage view="overview" />,
+});
+
+const formulaLabFormulasRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/formula-lab/formulas",
+  component: () => <FormulaLabPage view="formulas" />,
+});
+
+const formulaLabExperimentsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/formula-lab/experiments",
+  component: () => <FormulaLabPage view="experiments" />,
+});
+
+const formulaLabSystemRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/formula-lab/system",
+  component: () => <FormulaLabPage view="system" />,
 });
 
 const legacyPolymarketFormulaLabRoute = createRoute({
@@ -318,7 +336,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   forgotPasswordRoute,
   resetPasswordRoute,
-  protectedRoute.addChildren([indexRoute, dashboardRoute, notesRoute, catalogRoute, strategyDetailRoute, sweepsRoute, sweepsHistoryRoute, sweepDetailRoute, analyticsRoute, tesseractRoute, knowledgeRoute, polymarketRoute, polymarketStrategyRoute, polymarketAssetRoute, formulaLabRoute, legacyPolymarketFormulaLabRoute, crucibleRoute, resultsRoute, leaderboardRoute, assetsRoute, screensRoute, chartsRoute, liveRoute, portfolioRoute, positionsRoute, tradingRoute, settingsRoute, adminRoute]),
+  protectedRoute.addChildren([indexRoute, dashboardRoute, notesRoute, catalogRoute, strategyDetailRoute, sweepsRoute, sweepsHistoryRoute, sweepDetailRoute, analyticsRoute, tesseractRoute, knowledgeRoute, polymarketRoute, polymarketStrategyRoute, polymarketAssetRoute, formulaLabRoute, formulaLabFormulasRoute, formulaLabExperimentsRoute, formulaLabSystemRoute, legacyPolymarketFormulaLabRoute, crucibleRoute, resultsRoute, leaderboardRoute, assetsRoute, screensRoute, chartsRoute, liveRoute, portfolioRoute, positionsRoute, tradingRoute, settingsRoute, adminRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

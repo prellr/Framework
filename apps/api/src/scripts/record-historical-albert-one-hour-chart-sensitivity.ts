@@ -1,22 +1,19 @@
 /**
- * Record the Albert/BTC fixed-exit sensitivity receipt in Alchemy's knowledge base.
- *
- * This writes KB and audit metadata only. It cannot read live outcomes, register a strategy,
- * create a paper bot, start a search, or reach an execution path.
+ * Record the Albert BTC 1h-chart sensitivity receipt in Alchemy's knowledge base.
  */
 import { and, eq } from "drizzle-orm";
 import { auditLogs, db } from "@framework/db";
 import { appRouter } from "../trpc/router.ts";
 import { audit } from "../services/audit.ts";
 import {
-  HISTORICAL_ALBERT_HORIZON_SENSITIVITY_KNOWLEDGE,
-  renderHistoricalAlbertHorizonSensitivityKnowledge,
-} from "../services/historical-albert-horizon-sensitivity-knowledge.ts";
+  HISTORICAL_ALBERT_ONE_HOUR_CHART_SENSITIVITY_KNOWLEDGE,
+  renderHistoricalAlbertOneHourChartSensitivityKnowledge,
+} from "../services/historical-albert-one-hour-chart-sensitivity-knowledge.ts";
 
-const record = HISTORICAL_ALBERT_HORIZON_SENSITIVITY_KNOWLEDGE;
+const record = HISTORICAL_ALBERT_ONE_HOUR_CHART_SENSITIVITY_KNOWLEDGE;
 const slug = record.version;
-const marker = "## Historical Albert formula × BTC fixed-exit sensitivity v1";
-const action = "kb.historical-albert-horizon-sensitivity.record";
+const marker = "## Historical Albert formula × BTC 1h-chart sensitivity v1";
+const action = "kb.historical-albert-one-hour-chart-sensitivity.record";
 const user = {
   id: "agent",
   name: "Agent",
@@ -33,7 +30,7 @@ const user = {
 const ctx = {
   user,
   session: null,
-  req: new Request("http://localhost/internal/kb-historical-albert-horizon-sensitivity"),
+  req: new Request("http://localhost/internal/kb-historical-albert-one-hour-chart-sensitivity"),
 };
 const caller = appRouter.createCaller(ctx);
 
@@ -48,7 +45,7 @@ if (
   || record.invariants.enablesExecution
   || !record.invariants.preservesVerdictGate
 ) {
-  throw new Error("Albert horizon sensitivity knowledge contract does not match disposition");
+  throw new Error("Albert 1h-chart knowledge contract does not match disposition");
 }
 
 const ensureAudit = async () => {
@@ -85,7 +82,7 @@ if (existing && !existing.body.includes(marker)) {
 
 await caller.kb.upsert({
   slug,
-  title: "Historical Albert formula × BTC fixed-exit sensitivity v1",
+  title: "Historical Albert formula × BTC 1h-chart sensitivity v1",
   category: "research",
   tags: [
     "alchemy",
@@ -93,11 +90,11 @@ await caller.kb.upsert({
     "qlib",
     "hyperliquid",
     "btc",
-    "fixed-horizon",
+    "1h-chart",
     "walk-forward",
     "paper-only",
   ],
-  body: renderHistoricalAlbertHorizonSensitivityKnowledge(new Date().toISOString()),
+  body: renderHistoricalAlbertOneHourChartSensitivityKnowledge(new Date().toISOString()),
   sources: record.sources.map(({ title, url }) => ({ title, url })),
   status: "active",
 });

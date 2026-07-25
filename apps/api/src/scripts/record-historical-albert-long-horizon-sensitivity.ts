@@ -1,5 +1,5 @@
 /**
- * Record the Albert/BTC fixed-exit sensitivity receipt in Alchemy's knowledge base.
+ * Record the Albert/BTC 5m long-exit sensitivity receipt in Alchemy's knowledge base.
  *
  * This writes KB and audit metadata only. It cannot read live outcomes, register a strategy,
  * create a paper bot, start a search, or reach an execution path.
@@ -9,14 +9,14 @@ import { auditLogs, db } from "@framework/db";
 import { appRouter } from "../trpc/router.ts";
 import { audit } from "../services/audit.ts";
 import {
-  HISTORICAL_ALBERT_HORIZON_SENSITIVITY_KNOWLEDGE,
-  renderHistoricalAlbertHorizonSensitivityKnowledge,
-} from "../services/historical-albert-horizon-sensitivity-knowledge.ts";
+  HISTORICAL_ALBERT_LONG_HORIZON_SENSITIVITY_KNOWLEDGE,
+  renderHistoricalAlbertLongHorizonSensitivityKnowledge,
+} from "../services/historical-albert-long-horizon-sensitivity-knowledge.ts";
 
-const record = HISTORICAL_ALBERT_HORIZON_SENSITIVITY_KNOWLEDGE;
+const record = HISTORICAL_ALBERT_LONG_HORIZON_SENSITIVITY_KNOWLEDGE;
 const slug = record.version;
-const marker = "## Historical Albert formula × BTC fixed-exit sensitivity v1";
-const action = "kb.historical-albert-horizon-sensitivity.record";
+const marker = "## Historical Albert formula × BTC 5m long-exit sensitivity v1";
+const action = "kb.historical-albert-long-horizon-sensitivity.record";
 const user = {
   id: "agent",
   name: "Agent",
@@ -33,7 +33,7 @@ const user = {
 const ctx = {
   user,
   session: null,
-  req: new Request("http://localhost/internal/kb-historical-albert-horizon-sensitivity"),
+  req: new Request("http://localhost/internal/kb-historical-albert-long-horizon-sensitivity"),
 };
 const caller = appRouter.createCaller(ctx);
 
@@ -48,7 +48,7 @@ if (
   || record.invariants.enablesExecution
   || !record.invariants.preservesVerdictGate
 ) {
-  throw new Error("Albert horizon sensitivity knowledge contract does not match disposition");
+  throw new Error("Albert long-horizon knowledge contract does not match disposition");
 }
 
 const ensureAudit = async () => {
@@ -85,7 +85,7 @@ if (existing && !existing.body.includes(marker)) {
 
 await caller.kb.upsert({
   slug,
-  title: "Historical Albert formula × BTC fixed-exit sensitivity v1",
+  title: "Historical Albert formula × BTC 5m long-exit sensitivity v1",
   category: "research",
   tags: [
     "alchemy",
@@ -94,10 +94,11 @@ await caller.kb.upsert({
     "hyperliquid",
     "btc",
     "fixed-horizon",
+    "long-horizon",
     "walk-forward",
     "paper-only",
   ],
-  body: renderHistoricalAlbertHorizonSensitivityKnowledge(new Date().toISOString()),
+  body: renderHistoricalAlbertLongHorizonSensitivityKnowledge(new Date().toISOString()),
   sources: record.sources.map(({ title, url }) => ({ title, url })),
   status: "active",
 });

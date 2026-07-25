@@ -67,7 +67,10 @@ const ensureAudit = async () => {
 };
 
 const existing = await caller.kb.get({ slug });
-if (existing?.body.includes(marker)) {
+if (
+  existing?.body.includes(marker)
+  && existing.body.includes(record.receipt.receiptHash)
+) {
   console.log(JSON.stringify({
     updated: false,
     auditInserted: await ensureAudit(),
@@ -76,7 +79,9 @@ if (existing?.body.includes(marker)) {
   }, null, 2));
   process.exit(0);
 }
-if (existing) throw new Error(`refusing to replace existing KB article without marker: ${slug}`);
+if (existing && !existing.body.includes(marker)) {
+  throw new Error(`refusing to replace existing KB article without marker: ${slug}`);
+}
 
 await caller.kb.upsert({
   slug,
@@ -96,10 +101,15 @@ await caller.kb.upsert({
   sources: record.sources.map(({ title, url }) => ({ title, url })),
   status: "active",
 });
+await audit(ctx, action, {
+  resourceType: "kbArticle",
+  resourceId: slug,
+  newValue: { receiptHash: record.receipt.receiptHash },
+});
 
 console.log(JSON.stringify({
   updated: true,
-  auditInserted: await ensureAudit(),
+  auditInserted: true,
   slug,
   receiptHash: record.receipt.receiptHash,
   sourceCount: record.sources.length,

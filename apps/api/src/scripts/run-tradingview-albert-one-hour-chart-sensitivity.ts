@@ -1,9 +1,8 @@
 /**
- * Run the frozen Albert expression over a declared fixed-exit horizon family.
+ * Run the legacy Albert expression on deterministic UTC-aligned BTC 1h bars.
  *
- * The 10-minute replay is retained as the baseline. The 30-, 60-, and 240-minute exits are
- * sensitivity rows, not replacements for the original receipt. This script writes only a
- * content-addressed retrospective research receipt. It cannot register or execute a strategy.
+ * This is a distinct formula family: all bar-based operators now consume completed 1h OHLCV bars.
+ * The run writes only a content-addressed retrospective receipt and cannot register or execute.
  */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -15,28 +14,39 @@ import {
   runHistoricalOhlcvFormulaReplay,
 } from "../services/historical-ohlcv-formula-replay.ts";
 import {
+  HISTORICAL_OHLCV_RESAMPLE,
+  resampleCanonicalOhlcvReplayRows,
+} from "../services/historical-ohlcv-resample.ts";
+import {
   LEGACY_ALBERT_FORMULA_SOURCE,
   parseLegacyFormula,
 } from "../services/legacy-formula-research.ts";
 
-const HORIZON_SENSITIVITY = {
-  version: "alchemy-historical-albert-btc-5m-horizon-sensitivity-v1",
+const ONE_HOUR_CHART_SENSITIVITY = {
+  version: "alchemy-historical-albert-btc-1h-chart-sensitivity-v1",
   evidenceClass: "retrospective-discovery-only",
-  sourceIntervalMinutes: 5,
-  holdMinutes: [10, 30, 60, 240],
+  sourceIntervalMinutes: 60,
+  sourceAggregation: {
+    source: "immutable BTC 5m TradingView tape",
+    target: "UTC-aligned 1h full buckets",
+    expectedBarsPerBucket: 12,
+    partialBuckets: "discard",
+    gaps: "never bridge; begin a new output segment",
+  },
+  holdMinutes: [60, 240, 720, 1_440],
   side: "short",
-  entry: "next contiguous 5m bar open after the completed formula bar",
-  exit: "contiguous 5m bar open exactly holdMinutes after entry",
+  entry: "next contiguous 1h bar open after the completed formula bar",
+  exit: "contiguous 1h bar open exactly holdMinutes after entry",
   folds: 4,
   testFractionPerFold: 0.15,
-  minimumTrainingPoints: 20_000,
+  minimumTrainingPoints: 2_000,
   minimumTestTrades: 100,
   roundTripCostBps: 10,
   thresholdZs: [0, 0.5, 1],
   capital:
     "$10,000 start · $1,000 fixed notional · one non-overlapping position at a time",
   invariants: {
-    formulaChangedAcrossHorizons: false,
+    chartIntervalChangesFormulaSemantics: true,
     thresholdsUseTrainingRowsOnly: true,
     crossesTapeGaps: false,
     overlappingPositionsAllowed: false,
@@ -73,28 +83,37 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
 const canonicalPath =
   process.env.ALCHEMY_TV_CANONICAL_PATH
   ?? fileURLToPath(manifest.artifact.uri);
-const rows = await loadCanonicalOhlcvReplayRows({
+const sourceRows = await loadCanonicalOhlcvReplayRows({
   canonicalPath,
   expectedContentHash: manifest.contentHash,
 });
+const resampled = resampleCanonicalOhlcvReplayRows({
+  rows: sourceRows,
+  sourceIntervalMs: 5 * 60_000,
+  targetIntervalMs: ONE_HOUR_CHART_SENSITIVITY.sourceIntervalMinutes * 60_000,
+  targetIntervalLabel: "1h",
+});
+const derivedDatasetId = `${manifest.datasetId}-utc-1h-full-buckets`;
+const derivedDatasetVersion =
+  `${manifest.datasetVersion}-${HISTORICAL_OHLCV_RESAMPLE.version}-${resampled.contentHash.slice(7, 19)}`;
 const expression = parseLegacyFormula(LEGACY_ALBERT_FORMULA_SOURCE);
-const horizons = HORIZON_SENSITIVITY.holdMinutes.map((holdMinutes) => {
+const horizons = ONE_HOUR_CHART_SENSITIVITY.holdMinutes.map((holdMinutes) => {
   const result = runHistoricalOhlcvFormulaReplay({
-    datasetId: manifest.datasetId,
-    datasetVersion: manifest.datasetVersion,
-    datasetContentHash: manifest.contentHash,
-    rows,
+    datasetId: derivedDatasetId,
+    datasetVersion: derivedDatasetVersion,
+    datasetContentHash: resampled.contentHash,
+    rows: resampled.rows,
     expression,
     config: {
-      intervalMs: HORIZON_SENSITIVITY.sourceIntervalMinutes * 60_000,
+      intervalMs: ONE_HOUR_CHART_SENSITIVITY.sourceIntervalMinutes * 60_000,
       holdMs: holdMinutes * 60_000,
       warmupBarsPerSegment: 64,
-      folds: HORIZON_SENSITIVITY.folds,
-      testFractionPerFold: HORIZON_SENSITIVITY.testFractionPerFold,
-      minimumTrainingPoints: HORIZON_SENSITIVITY.minimumTrainingPoints,
-      minimumTestTrades: HORIZON_SENSITIVITY.minimumTestTrades,
-      roundTripCostBps: HORIZON_SENSITIVITY.roundTripCostBps,
-      thresholdZs: [...HORIZON_SENSITIVITY.thresholdZs],
+      folds: ONE_HOUR_CHART_SENSITIVITY.folds,
+      testFractionPerFold: ONE_HOUR_CHART_SENSITIVITY.testFractionPerFold,
+      minimumTrainingPoints: ONE_HOUR_CHART_SENSITIVITY.minimumTrainingPoints,
+      minimumTestTrades: ONE_HOUR_CHART_SENSITIVITY.minimumTestTrades,
+      roundTripCostBps: ONE_HOUR_CHART_SENSITIVITY.roundTripCostBps,
+      thresholdZs: [...ONE_HOUR_CHART_SENSITIVITY.thresholdZs],
     },
   });
   return {
@@ -105,7 +124,21 @@ const horizons = HORIZON_SENSITIVITY.holdMinutes.map((holdMinutes) => {
 });
 
 const batch = {
-  ...HORIZON_SENSITIVITY,
+  ...ONE_HOUR_CHART_SENSITIVITY,
+  sourceDataset: {
+    id: manifest.datasetId,
+    version: manifest.datasetVersion,
+    contentHash: manifest.contentHash,
+    rows: sourceRows.length,
+  },
+  aggregation: {
+    version: resampled.version,
+    contentHash: resampled.contentHash,
+    rows: resampled.rows.length,
+    expectedSourceBarsPerTarget: resampled.expectedSourceBarsPerTarget,
+    rejectedBuckets: resampled.rejectedBuckets,
+    invariants: resampled.invariants,
+  },
   dataset: horizons[0]!.result.dataset,
   formula: horizons[0]!.result.formula,
   horizons,
@@ -116,7 +149,7 @@ const receipt = { receiptHash, ...batch };
 const receiptDir = path.join(
   researchRoot,
   "results",
-  "historical-albert-horizon-sensitivity",
+  "historical-albert-one-hour-chart-sensitivity",
 );
 const receiptPath = path.join(
   receiptDir,
@@ -139,6 +172,8 @@ console.log(JSON.stringify({
   receiptPath,
   version: receipt.version,
   evidenceClass: receipt.evidenceClass,
+  sourceDataset: receipt.sourceDataset,
+  aggregation: receipt.aggregation,
   dataset: receipt.dataset,
   formula: receipt.formula,
   horizons: receipt.horizons.map((horizon) => ({

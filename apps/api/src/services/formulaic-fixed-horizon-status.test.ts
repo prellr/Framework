@@ -30,7 +30,7 @@ test("Formula Lab status exposes the complete deterministic trial universe", () 
   assert.equal(status.proof.candidatesEvaluated, 33);
   assert.equal(status.proof.folds.length, 4);
   assert.equal(status.proof.isMarketEvidence, false);
-  assert.equal(status.historicalReplay.dataset.rows, 102_267);
+  assert.equal(status.historicalReplay.dataset.rows, 140_999);
   assert.equal(status.historicalReplay.trials.length, 7);
   assert.equal(status.historicalReplay.trials.filter((trial) => trial.available).length, 2);
   assert.ok(status.historicalReplay.trials.every((trial) => trial.positiveFolds === 0));
@@ -55,6 +55,44 @@ test("Formula Lab status exposes the complete deterministic trial universe", () 
   );
   assert.equal(
     status.historicalHorizonSensitivity.invariants.enablesExecution,
+    false,
+  );
+  assert.deepEqual(
+    status.historicalLongHorizonSensitivity.target.requestedHoldMinutes,
+    [480, 720, 1_440],
+  );
+  assert.equal(status.historicalLongHorizonSensitivity.horizons.length, 3);
+  assert.ok(status.historicalLongHorizonSensitivity.horizons.every(
+    (horizon) => horizon.trials.length === 7,
+  ));
+  assert.ok(status.historicalLongHorizonSensitivity.horizons
+    .find((horizon) => horizon.holdMinutes === 1_440)!
+    .trials.every((trial) => !trial.available));
+  assert.equal(
+    status.historicalLongHorizonSensitivity.invariants.registersStrategy,
+    false,
+  );
+  assert.equal(
+    status.historicalLongHorizonSensitivity.invariants.enablesExecution,
+    false,
+  );
+  assert.deepEqual(
+    status.historicalOneHourChartSensitivity.target.requestedHoldMinutes,
+    [60, 240, 720, 1_440],
+  );
+  assert.equal(status.historicalOneHourChartSensitivity.aggregation.rows, 11_742);
+  const oneHourChartLead = status.historicalOneHourChartSensitivity.horizons
+    .find((horizon) => horizon.holdMinutes === 1_440)!
+    .trials.find((trial) => trial.id === "albert-short-low:z1")!;
+  assert.equal(oneHourChartLead.trades, 45);
+  assert.equal(oneHourChartLead.positiveFolds, 3);
+  assert.equal(oneHourChartLead.available, false);
+  assert.equal(
+    status.historicalOneHourChartSensitivity.invariants.registersStrategy,
+    false,
+  );
+  assert.equal(
+    status.historicalOneHourChartSensitivity.invariants.enablesExecution,
     false,
   );
 });

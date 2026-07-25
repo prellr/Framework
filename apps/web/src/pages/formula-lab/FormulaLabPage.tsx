@@ -3,7 +3,9 @@ import { Link } from "@tanstack/react-router";
 import type { RouterOutput } from "@framework/api/router";
 import {
   ArrowLeft,
+  Activity,
   Binary,
+  BookOpen,
   Boxes,
   Braces,
   Clock3,
@@ -13,9 +15,11 @@ import {
   FlaskConical,
   Layers3,
   Lock,
+  Microscope,
   Route,
   ShieldCheck,
   WalletCards,
+  Workflow,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +41,12 @@ type VenueTrial = VenuePreview["trials"][number];
 type HistoricalTrial = FormulaLab["historicalReplay"]["trials"][number];
 type HistoricalHorizonTrial =
   FormulaLab["historicalHorizonSensitivity"]["horizons"][number]["trials"][number]
+  & { holdMinutes: number };
+type HistoricalLongHorizonTrial =
+  FormulaLab["historicalLongHorizonSensitivity"]["horizons"][number]["trials"][number]
+  & { holdMinutes: number };
+type HistoricalOneHourChartTrial =
+  FormulaLab["historicalOneHourChartSensitivity"]["horizons"][number]["trials"][number]
   & { holdMinutes: number };
 type FormulaOperator = FormulaLab["operatorCatalog"]["operators"][number];
 type CandidateSortKey = "id" | "formula" | "threshold" | "complexity";
@@ -87,6 +97,8 @@ type HistoricalHorizonSortKey =
   | "positiveFolds"
   | "worstFold"
   | "finalEquity";
+type HistoricalOneHourChartSortKey = HistoricalHorizonSortKey | "lcb";
+export type FormulaLabView = "overview" | "formulas" | "experiments" | "system";
 
 const bps = (value: number | null) =>
   value == null ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)} bps`;
@@ -144,7 +156,7 @@ function historicalValue(row: HistoricalTrial, key: HistoricalSortKey): SortValu
 }
 
 function historicalHorizonValue(
-  row: HistoricalHorizonTrial,
+  row: HistoricalHorizonTrial | HistoricalLongHorizonTrial,
   key: HistoricalHorizonSortKey,
 ): SortValue {
   switch (key) {
@@ -159,6 +171,14 @@ function historicalHorizonValue(
     case "worstFold": return row.worstFoldMeanNetBps;
     case "finalEquity": return row.finalEquityUsd;
   }
+}
+
+function historicalOneHourChartValue(
+  row: HistoricalOneHourChartTrial,
+  key: HistoricalOneHourChartSortKey,
+): SortValue {
+  if (key === "lcb") return row.lowerConfidenceBoundNetBps;
+  return historicalHorizonValue(row, key);
 }
 
 const horizonLabel = (holdMinutes: number) =>
@@ -200,23 +220,85 @@ function Metric({
   );
 }
 
-export function FormulaLabPage() {
+const LAB_VIEWS = [
+  {
+    id: "overview",
+    to: "/formula-lab",
+    label: "Lab overview",
+    code: "00",
+    description: "Research map and current leads",
+    icon: Activity,
+  },
+  {
+    id: "formulas",
+    to: "/formula-lab/formulas",
+    label: "Formula explorer",
+    code: "01",
+    description: "Operators, expressions, mechanics",
+    icon: Braces,
+  },
+  {
+    id: "experiments",
+    to: "/formula-lab/experiments",
+    label: "Experiment archive",
+    code: "02",
+    description: "Frozen tapes and sensitivity runs",
+    icon: Microscope,
+  },
+  {
+    id: "system",
+    to: "/formula-lab/system",
+    label: "Lab infrastructure",
+    code: "03",
+    description: "Scale, adapters, controls",
+    icon: Workflow,
+  },
+] as const;
+
+const LAB_VIEW_COPY: Record<FormulaLabView, { title: string; subtitle: string }> = {
+  overview: {
+    title: "Formula Lab",
+    subtitle:
+      "A venue-neutral research workspace for algebraic hypotheses, immutable experiments, and forward-only admission.",
+  },
+  formulas: {
+    title: "Formula explorer",
+    subtitle:
+      "Inspect the governed operator vocabulary, expression trees, threshold families, and chronological evaluator mechanics.",
+  },
+  experiments: {
+    title: "Experiment archive",
+    subtitle:
+      "Every frozen historical run, sensitivity family, failure, and under-sampled lead stays in the denominator.",
+  },
+  system: {
+    title: "Lab infrastructure",
+    subtitle:
+      "Bounded search plans, workload contracts, source adapters, target economics, and execution-safe controls.",
+  },
+};
+
+export function FormulaLabPage({ view = "overview" }: { view?: FormulaLabView }) {
   const lab = trpc.formulaLab.status.useQuery(undefined, {
     staleTime: Number.POSITIVE_INFINITY,
   });
   const basis = trpc.polymarket.resolutionSourceBasisDistributionAudit.useQuery(undefined, {
     staleTime: 15 * 60_000,
     refetchInterval: 15 * 60_000,
+    enabled: view === "overview" || view === "experiments",
   });
   const venuePreview = trpc.formulaLab.venuePreview.useQuery(undefined, {
     staleTime: Number.POSITIVE_INFINITY,
+    enabled: view === "experiments",
   });
   const scaleStatus = trpc.formulaLab.scaleStatus.useQuery(undefined, {
     staleTime: Number.POSITIVE_INFINITY,
+    enabled: view === "system",
   });
   const controlPlaneStatus = trpc.formulaLab.controlPlaneStatus.useQuery(undefined, {
     staleTime: 30_000,
     refetchInterval: 30_000,
+    enabled: view === "system",
   });
   const [candidateSort, setCandidateSort] = useState<SortState<CandidateSortKey>>({
     key: "complexity",
@@ -236,6 +318,18 @@ export function FormulaLabPage() {
   });
   const [historicalHorizonSort, setHistoricalHorizonSort] = useState<
     SortState<HistoricalHorizonSortKey>
+  >({
+    key: "horizon",
+    direction: "asc",
+  });
+  const [historicalLongHorizonSort, setHistoricalLongHorizonSort] = useState<
+    SortState<HistoricalHorizonSortKey>
+  >({
+    key: "horizon",
+    direction: "asc",
+  });
+  const [historicalOneHourChartSort, setHistoricalOneHourChartSort] = useState<
+    SortState<HistoricalOneHourChartSortKey>
   >({
     key: "horizon",
     direction: "asc",
@@ -299,6 +393,36 @@ export function FormulaLabPage() {
       ),
     [historicalHorizonSort, lab.data],
   );
+  const historicalLongHorizonTrials = useMemo(
+    () =>
+      stableSortRows(
+        (lab.data?.historicalLongHorizonSensitivity.horizons ?? []).flatMap(
+          (horizon) =>
+            horizon.trials.map((trial) => ({
+              ...trial,
+              holdMinutes: horizon.holdMinutes,
+            })),
+        ),
+        (row) => historicalHorizonValue(row, historicalLongHorizonSort.key),
+        historicalLongHorizonSort.direction,
+      ),
+    [historicalLongHorizonSort, lab.data],
+  );
+  const historicalOneHourChartTrials = useMemo(
+    () =>
+      stableSortRows(
+        (lab.data?.historicalOneHourChartSensitivity.horizons ?? []).flatMap(
+          (horizon) =>
+            horizon.trials.map((trial) => ({
+              ...trial,
+              holdMinutes: horizon.holdMinutes,
+            })),
+        ),
+        (row) => historicalOneHourChartValue(row, historicalOneHourChartSort.key),
+        historicalOneHourChartSort.direction,
+      ),
+    [historicalOneHourChartSort, lab.data],
+  );
   const operators = useMemo(
     () =>
       stableSortRows(
@@ -327,6 +451,11 @@ export function FormulaLabPage() {
   }
 
   const data = lab.data;
+  const oneHour24hLowTailZ1 =
+    data.historicalOneHourChartSensitivity.horizons
+      .find((horizon) => horizon.holdMinutes === 1_440)
+      ?.trials.find((trial) => trial.id === "albert-short-low:z1")
+    ?? null;
   const weakest = basis.data
     ? {
         rows: Math.min(...basis.data.tape.pairs.map((pair) => pair.rows)),
@@ -356,6 +485,18 @@ export function FormulaLabPage() {
   ) => setHistoricalHorizonSort(
     (current) => nextSortState(current, key, initialDirection),
   );
+  const sortHistoricalLongHorizon = (
+    key: HistoricalHorizonSortKey,
+    initialDirection: "asc" | "desc" = "asc",
+  ) => setHistoricalLongHorizonSort(
+    (current) => nextSortState(current, key, initialDirection),
+  );
+  const sortHistoricalOneHourChart = (
+    key: HistoricalOneHourChartSortKey,
+    initialDirection: "asc" | "desc" = "asc",
+  ) => setHistoricalOneHourChartSort(
+    (current) => nextSortState(current, key, initialDirection),
+  );
   const sortOperators = (
     key: OperatorSortKey,
     initialDirection: "asc" | "desc" = "asc",
@@ -380,8 +521,8 @@ export function FormulaLabPage() {
       </Link>
 
       <PageHeader
-        title="Formula Lab"
-        subtitle="Alchemy’s venue-neutral algebraic hypothesis engine: causal source adapters in, bounded formulas and fixed-horizon labels through the middle, separately costed target adapters out."
+        title={LAB_VIEW_COPY[view].title}
+        subtitle={LAB_VIEW_COPY[view].subtitle}
         actions={
           <span className="inline-flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-xs font-medium text-warning">
             <Lock className="h-3.5 w-3.5" />
@@ -390,6 +531,35 @@ export function FormulaLabPage() {
         }
       />
 
+      <nav
+        aria-label="Formula Lab sections"
+        className="grid overflow-hidden rounded-xl border bg-card sm:grid-cols-2 xl:grid-cols-4"
+      >
+        {LAB_VIEWS.map((item) => {
+          const active = item.id === view;
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.id}
+              to={item.to}
+              aria-current={active ? "page" : undefined}
+              className={`group min-h-24 border-b p-4 transition-colors last:border-b-0 hover:bg-muted/25 sm:border-r sm:[&:nth-child(2n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(2n)]:border-r xl:last:border-r-0 ${
+                active ? "bg-muted/30" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-mono text-[10px] text-muted-foreground">{item.code}</span>
+                <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
+              </div>
+              <div className="mt-3 text-sm font-semibold">{item.label}</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{item.description}</div>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {view === "overview" ? (
+        <>
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Metric
           icon={Braces}
@@ -438,6 +608,73 @@ export function FormulaLabPage() {
         </div>
       </section>
 
+      <section className="grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
+        <article className="overflow-hidden rounded-xl border bg-card">
+          <header className="border-b px-4 py-4">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <BookOpen className="h-3.5 w-3.5" />
+              Current research docket
+            </div>
+            <h2 className="mt-1 text-base font-semibold">BTC historical formula program</h2>
+          </header>
+          <div className="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="p-4">
+              <div className="font-mono text-xl font-semibold">
+                {data.historicalOneHourChartSensitivity.sourceDataset.rows.toLocaleString()}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                immutable BTC 5m source bars
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="font-mono text-xl font-semibold">
+                {data.historicalOneHourChartSensitivity.aggregation.rows.toLocaleString()}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                complete UTC-aligned 1h bars
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="font-mono text-xl font-semibold">0</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                formulas admitted or registered
+              </div>
+            </div>
+          </div>
+          <div className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+            {data.historicalOneHourChartSensitivity.interpretation}
+          </div>
+        </article>
+
+        <article className="overflow-hidden rounded-xl border bg-card">
+          <header className="border-b px-4 py-4">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <Microscope className="h-3.5 w-3.5" />
+              Workbench routing
+            </div>
+            <h2 className="mt-1 text-base font-semibold">Move through the lab</h2>
+          </header>
+          <div className="divide-y">
+            {LAB_VIEWS.slice(1).map((item) => (
+              <Link
+                key={item.id}
+                to={item.to}
+                className="flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-muted/20"
+              >
+                <div>
+                  <div className="text-sm font-medium">{item.label}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{item.description}</div>
+                </div>
+                <span className="font-mono text-[10px] text-muted-foreground">{item.code}</span>
+              </Link>
+            ))}
+          </div>
+        </article>
+      </section>
+        </>
+      ) : null}
+
+      {view === "system" ? (
       <section className="overflow-hidden rounded-xl border bg-card">
         <header className="border-b px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -606,7 +843,9 @@ export function FormulaLabPage() {
           </>
         )}
       </section>
+      ) : null}
 
+      {view === "formulas" ? (
       <section className="overflow-hidden rounded-xl border bg-card">
         <header className="border-b px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -715,7 +954,9 @@ export function FormulaLabPage() {
           every attempted formula in the denominator.
         </div>
       </section>
+      ) : null}
 
+      {view === "experiments" ? (
       <section className="overflow-hidden rounded-xl border bg-card">
         <header className="border-b px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -988,7 +1229,9 @@ export function FormulaLabPage() {
           </>
         )}
       </section>
+      ) : null}
 
+      {view === "system" ? (
       <section className="overflow-hidden rounded-xl border bg-card">
         <header className="border-b px-4 py-4">
           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -1027,7 +1270,10 @@ export function FormulaLabPage() {
           ))}
         </div>
       </section>
+      ) : null}
 
+      {view === "experiments" ? (
+        <>
       <section className="overflow-hidden rounded-xl border bg-card">
         <header className="border-b px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1365,6 +1611,365 @@ export function FormulaLabPage() {
         </div>
       </section>
 
+      <section className="overflow-hidden rounded-xl border bg-card">
+        <header className="border-b px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Long-exit sensitivity · retrospective discovery
+              </div>
+              <h2 className="mt-1 text-base font-semibold">
+                Albert formula × BTC 5m × 8h / 12h / 24h exits
+              </h2>
+              <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                This second frozen family extends only the exit clock. It keeps the 5-minute
+                formula, source tape, short side, next-open entry, training-only thresholds,
+                chronological folds, non-overlap rule, and 10 bps cost stress unchanged. A positive
+                aggregate cannot pass when any fold misses the 100-trade floor.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-warning">
+              <Lock className="h-3.5 w-3.5" />
+              no robust pass
+            </span>
+          </div>
+        </header>
+
+        <div className="grid border-b sm:grid-cols-3">
+          {data.historicalLongHorizonSensitivity.horizons.map((horizon) => {
+            const finiteTrials = horizon.trials.filter(
+              (trial) => trial.meanGrossBps != null,
+            );
+            const bestGross = finiteTrials.reduce(
+              (best, trial) =>
+                (trial.meanGrossBps ?? Number.NEGATIVE_INFINITY)
+                  > (best.meanGrossBps ?? Number.NEGATIVE_INFINITY)
+                  ? trial
+                  : best,
+              finiteTrials[0]!,
+            );
+            return (
+              <article
+                key={horizon.holdMinutes}
+                className="border-b p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {horizonLabel(horizon.holdMinutes)} forced exit
+                  </div>
+                  <span className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                    bestGross.available
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-warning/30 bg-warning/10 text-warning"
+                  }`}>
+                    {bestGross.available ? "floor met" : "under floor"}
+                  </span>
+                </div>
+                <div className="mt-2 font-mono text-xl font-semibold">
+                  {bps(bestGross.meanGrossBps)} gross
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {bestGross.id} · {bps(bestGross.meanNetBps)} net ·{" "}
+                  {bestGross.positiveFolds}/{data.historicalLongHorizonSensitivity.target.folds} positive
+                  folds
+                </p>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="border-b bg-warning/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">Observed result:</span>{" "}
+          {data.historicalLongHorizonSensitivity.observedResult}
+        </div>
+
+        <details>
+          <summary className="cursor-pointer border-b px-4 py-3 text-xs font-medium">
+            Show all 21 frozen long-exit trials
+          </summary>
+          <div className="border-b px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+            {data.historicalLongHorizonSensitivity.interpretation}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1260px] text-sm">
+              <thead className="border-b bg-muted/20 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                <tr>
+                  <PolymarketSortableHeader column="horizon" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon}>Exit</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="trial" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon}>Trial</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="status" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon}>Sample floor</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="trades" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon} align="right">Trades</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="gross" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon} align="right">Gross mean</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="net" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon} align="right">Net mean</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="hitRate" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon} align="right">Net hit</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="positiveFolds" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon} align="right">Positive folds</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="worstFold" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon} align="right">Worst fold</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="finalEquity" active={historicalLongHorizonSort.key} direction={historicalLongHorizonSort.direction} onSort={sortHistoricalLongHorizon} align="right">Final equity</PolymarketSortableHeader>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {historicalLongHorizonTrials.map((trial) => (
+                  <tr
+                    key={`${trial.holdMinutes}:${trial.id}`}
+                    className={trial.available ? "hover:bg-muted/10" : "text-muted-foreground"}
+                  >
+                    <td className="px-4 py-3 font-mono font-medium">{horizonLabel(trial.holdMinutes)}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs font-medium">{trial.id}</div>
+                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                        {trial.tail === "all"
+                          ? "every eligible decision"
+                          : `${trial.tail} tail · z ${trial.thresholdZ}`}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        trial.available
+                          ? "border-success/30 bg-success/10 text-success"
+                          : "border-warning/30 bg-warning/10 text-warning"
+                      }`}>
+                        {trial.available ? "met" : "under"}
+                      </span>
+                      {!trial.available ? (
+                        <div className="mt-1 max-w-48 text-[10px] leading-tight text-muted-foreground">
+                          {trial.unavailableReason}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">{trial.trades.toLocaleString()}</td>
+                    <td className={`px-4 py-3 text-right font-mono ${
+                      trial.meanGrossBps == null ? "" : trial.meanGrossBps > 0 ? "text-success" : "text-destructive"
+                    }`}>{bps(trial.meanGrossBps)}</td>
+                    <td className={`px-4 py-3 text-right font-mono ${
+                      trial.meanNetBps == null ? "" : trial.meanNetBps > 0 ? "text-success" : "text-destructive"
+                    }`}>{bps(trial.meanNetBps)}</td>
+                    <td className="px-4 py-3 text-right font-mono">{pct(trial.hitRate)}</td>
+                    <td className="px-4 py-3 text-right font-mono">
+                      {trial.positiveFolds}/{data.historicalLongHorizonSensitivity.target.folds}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">{bps(trial.worstFoldMeanNetBps)}</td>
+                    <td className="px-4 py-3 text-right font-mono">
+                      ${trial.finalEquityUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <div className="border-t px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          Receipt{" "}
+          <span className="font-mono">
+            {data.historicalLongHorizonSensitivity.receiptHash.slice(0, 22)}…
+          </span>.
+          Sorting is descriptive only; no row is selected, exported, registered, or activated.
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border bg-card">
+        <header className="border-b px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Chart-timeframe sensitivity · retrospective discovery
+              </div>
+              <h2 className="mt-1 text-base font-semibold">
+                Albert formula × BTC 1h bars × 1h / 4h / 12h / 24h exits
+              </h2>
+              <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                The immutable 5-minute source was aggregated into{" "}
+                {data.historicalOneHourChartSensitivity.aggregation.rows.toLocaleString()} complete,
+                UTC-aligned 1-hour bars. Partial buckets were discarded and gaps were never bridged.
+                The formula’s 40/20/50-bar operators now span roughly 40–50 hours, making this a
+                separate signal family from every 5-minute-chart experiment.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-warning">
+              <Lock className="h-3.5 w-3.5" />
+              lead needs more history
+            </span>
+          </div>
+        </header>
+
+        <div className="grid border-b sm:grid-cols-2 lg:grid-cols-4">
+          {data.historicalOneHourChartSensitivity.horizons.map((horizon) => {
+            const finiteTrials = horizon.trials.filter((trial) => trial.meanNetBps != null);
+            const bestNet = finiteTrials.reduce(
+              (best, trial) =>
+                (trial.meanNetBps ?? Number.NEGATIVE_INFINITY)
+                  > (best.meanNetBps ?? Number.NEGATIVE_INFINITY)
+                  ? trial
+                  : best,
+              finiteTrials[0]!,
+            );
+            return (
+              <article
+                key={horizon.holdMinutes}
+                className="border-b p-4 last:border-b-0 sm:border-r sm:[&:nth-child(2n)]:border-r-0 lg:border-b-0 lg:[&:nth-child(2n)]:border-r lg:last:border-r-0"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {horizonLabel(horizon.holdMinutes)} exit
+                  </div>
+                  <span className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                    bestNet.available
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-warning/30 bg-warning/10 text-warning"
+                  }`}>
+                    {bestNet.available ? "floor met" : "under floor"}
+                  </span>
+                </div>
+                <div className={`mt-2 font-mono text-xl font-semibold ${
+                  (bestNet.meanNetBps ?? 0) > 0 ? "text-success" : "text-destructive"
+                }`}>
+                  {bps(bestNet.meanNetBps)} net
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {bestNet.id} · {bestNet.trades.toLocaleString()} trades ·{" "}
+                  {bestNet.positiveFolds}/{data.historicalOneHourChartSensitivity.target.folds} positive
+                  folds
+                </p>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="border-b bg-warning/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">Observed result:</span>{" "}
+          {data.historicalOneHourChartSensitivity.observedResult}
+        </div>
+
+        <div className="grid border-b md:grid-cols-3">
+          <article className="border-b p-4 md:border-b-0 md:border-r">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              24h low-tail z1 · descriptive
+            </div>
+            <div className={`mt-2 font-mono text-lg font-semibold ${
+              (oneHour24hLowTailZ1?.meanNetBps ?? 0) >= 0
+                ? "text-success"
+                : "text-destructive"
+            }`}>
+              {bps(oneHour24hLowTailZ1?.meanNetBps ?? null)} net
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              {oneHour24hLowTailZ1?.trades.toLocaleString() ?? "—"} trades ·{" "}
+              {oneHour24hLowTailZ1?.positiveFolds ?? "—"}/
+              {data.historicalOneHourChartSensitivity.target.folds} positive folds · worst{" "}
+              {bps(oneHour24hLowTailZ1?.worstFoldMeanNetBps ?? null)}
+            </p>
+          </article>
+          <article className="border-b p-4 md:border-b-0 md:border-r">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Why it cannot pass
+            </div>
+            <div className="mt-2 font-mono text-lg font-semibold text-destructive">
+              {bps(oneHour24hLowTailZ1?.lowerConfidenceBoundNetBps ?? null)} LCB
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Every fold missed the frozen 100-trade floor; uncertainty remains larger than the mean.
+            </p>
+          </article>
+          <article className="p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Correct disposition
+            </div>
+            <div className="mt-2 text-sm font-semibold">Do not promote this branch</div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Added history weakened the lead. Any new threshold, operator, or exit family must be
+              preregistered as a separate retrospective hypothesis.
+            </p>
+          </article>
+        </div>
+
+        <details>
+          <summary className="cursor-pointer border-b px-4 py-3 text-xs font-medium">
+            Show all 28 frozen 1h-chart trials
+          </summary>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1380px] text-sm">
+              <thead className="border-b bg-muted/20 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                <tr>
+                  <PolymarketSortableHeader column="horizon" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart}>Exit</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="trial" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart}>Trial</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="status" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart}>Sample floor</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="trades" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Trades</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="gross" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Gross mean</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="net" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Net mean</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="lcb" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Net 95% LCB</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="hitRate" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Net hit</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="positiveFolds" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Positive folds</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="worstFold" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Worst fold</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="finalEquity" active={historicalOneHourChartSort.key} direction={historicalOneHourChartSort.direction} onSort={sortHistoricalOneHourChart} align="right">Final equity</PolymarketSortableHeader>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {historicalOneHourChartTrials.map((trial) => (
+                  <tr
+                    key={`${trial.holdMinutes}:${trial.id}`}
+                    className={trial.available ? "hover:bg-muted/10" : "text-muted-foreground"}
+                  >
+                    <td className="px-4 py-3 font-mono font-medium">{horizonLabel(trial.holdMinutes)}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs font-medium">{trial.id}</div>
+                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                        {trial.tail === "all" ? "every eligible decision" : `${trial.tail} tail · z ${trial.thresholdZ}`}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        trial.available
+                          ? "border-success/30 bg-success/10 text-success"
+                          : "border-warning/30 bg-warning/10 text-warning"
+                      }`}>
+                        {trial.available ? "met" : "under"}
+                      </span>
+                      {!trial.available ? (
+                        <div className="mt-1 max-w-48 text-[10px] leading-tight text-muted-foreground">
+                          {trial.unavailableReason}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">{trial.trades.toLocaleString()}</td>
+                    <td className={`px-4 py-3 text-right font-mono ${
+                      trial.meanGrossBps == null ? "" : trial.meanGrossBps > 0 ? "text-success" : "text-destructive"
+                    }`}>{bps(trial.meanGrossBps)}</td>
+                    <td className={`px-4 py-3 text-right font-mono ${
+                      trial.meanNetBps == null ? "" : trial.meanNetBps > 0 ? "text-success" : "text-destructive"
+                    }`}>{bps(trial.meanNetBps)}</td>
+                    <td className={`px-4 py-3 text-right font-mono ${
+                      trial.lowerConfidenceBoundNetBps == null
+                        ? ""
+                        : trial.lowerConfidenceBoundNetBps > 0 ? "text-success" : "text-destructive"
+                    }`}>{bps(trial.lowerConfidenceBoundNetBps)}</td>
+                    <td className="px-4 py-3 text-right font-mono">{pct(trial.hitRate)}</td>
+                    <td className="px-4 py-3 text-right font-mono">
+                      {trial.positiveFolds}/{data.historicalOneHourChartSensitivity.target.folds}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">{bps(trial.worstFoldMeanNetBps)}</td>
+                    <td className="px-4 py-3 text-right font-mono">
+                      ${trial.finalEquityUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <div className="border-t px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          Derived tape{" "}
+          <span className="font-mono">
+            {data.historicalOneHourChartSensitivity.aggregation.contentHash.slice(0, 22)}…
+          </span>
+          {" "}· receipt{" "}
+          <span className="font-mono">
+            {data.historicalOneHourChartSensitivity.receiptHash.slice(0, 22)}…
+          </span>.
+          No formula or horizon was admitted.
+        </div>
+      </section>
+        </>
+      ) : null}
+
+      {view === "system" ? (
       <section className="grid gap-3 lg:grid-cols-2">
         <Card className="shadow-none">
           <CardContent className="p-0">
@@ -1416,7 +2021,10 @@ export function FormulaLabPage() {
           </CardContent>
         </Card>
       </section>
+      ) : null}
 
+      {view === "formulas" ? (
+        <>
       <section className="overflow-hidden rounded-xl border bg-card">
         <header className="border-b px-4 py-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1547,7 +2155,10 @@ export function FormulaLabPage() {
           </table>
         </div>
       </section>
+        </>
+      ) : null}
 
+      {view === "system" ? (
       <section className="grid gap-3 lg:grid-cols-2">
         <Card className="shadow-none">
           <CardContent className="p-4">
@@ -1572,6 +2183,7 @@ export function FormulaLabPage() {
           </CardContent>
         </Card>
       </section>
+      ) : null}
 
       <div className="rounded-lg border bg-muted/10 px-4 py-3 text-xs text-muted-foreground">
         No run, optimize, promote, paper-register, venue-connect, trade, sign, or submit control

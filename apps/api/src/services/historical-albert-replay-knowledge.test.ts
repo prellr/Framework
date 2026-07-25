@@ -11,7 +11,7 @@ test("Albert replay knowledge preserves semantics, negative result, and safety d
   assert.match(rendered, /Max\(feature,N\).*rolling maximum/i);
   assert.match(rendered, /No strategy selected/i);
   assert.match(rendered, /No declared trial produced a positive net fold/i);
-  assert.match(rendered, /sha256:f73f89915dc51a2c/);
+  assert.match(rendered, /sha256:76e61d73c35f7e4/);
   assert.equal(HISTORICAL_ALBERT_REPLAY_KNOWLEDGE.invariants.createsStrategy, false);
   assert.equal(HISTORICAL_ALBERT_REPLAY_KNOWLEDGE.invariants.enablesExecution, false);
   assert.equal(HISTORICAL_ALBERT_REPLAY_KNOWLEDGE.invariants.preservesVerdictGate, true);

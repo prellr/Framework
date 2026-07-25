@@ -1,8 +1,9 @@
 /**
- * Run the frozen Albert expression over a declared fixed-exit horizon family.
+ * Run the frozen Albert expression over a declared long-exit sensitivity family.
  *
- * The 10-minute replay is retained as the baseline. The 30-, 60-, and 240-minute exits are
- * sensitivity rows, not replacements for the original receipt. This script writes only a
+ * The 8h, 12h, and 24h exits change only the fixed exit clock on the immutable BTC 5m source
+ * tape. They do not change the formula, side, entry, threshold family, chronological folds,
+ * training-only calibration, cost stress, or non-overlap rule. This script writes only a
  * content-addressed retrospective research receipt. It cannot register or execute a strategy.
  */
 import { createHash } from "node:crypto";
@@ -19,11 +20,11 @@ import {
   parseLegacyFormula,
 } from "../services/legacy-formula-research.ts";
 
-const HORIZON_SENSITIVITY = {
-  version: "alchemy-historical-albert-btc-5m-horizon-sensitivity-v1",
+const LONG_HORIZON_SENSITIVITY = {
+  version: "alchemy-historical-albert-btc-5m-long-horizon-sensitivity-v1",
   evidenceClass: "retrospective-discovery-only",
   sourceIntervalMinutes: 5,
-  holdMinutes: [10, 30, 60, 240],
+  holdMinutes: [480, 720, 1_440],
   side: "short",
   entry: "next contiguous 5m bar open after the completed formula bar",
   exit: "contiguous 5m bar open exactly holdMinutes after entry",
@@ -78,7 +79,7 @@ const rows = await loadCanonicalOhlcvReplayRows({
   expectedContentHash: manifest.contentHash,
 });
 const expression = parseLegacyFormula(LEGACY_ALBERT_FORMULA_SOURCE);
-const horizons = HORIZON_SENSITIVITY.holdMinutes.map((holdMinutes) => {
+const horizons = LONG_HORIZON_SENSITIVITY.holdMinutes.map((holdMinutes) => {
   const result = runHistoricalOhlcvFormulaReplay({
     datasetId: manifest.datasetId,
     datasetVersion: manifest.datasetVersion,
@@ -86,15 +87,15 @@ const horizons = HORIZON_SENSITIVITY.holdMinutes.map((holdMinutes) => {
     rows,
     expression,
     config: {
-      intervalMs: HORIZON_SENSITIVITY.sourceIntervalMinutes * 60_000,
+      intervalMs: LONG_HORIZON_SENSITIVITY.sourceIntervalMinutes * 60_000,
       holdMs: holdMinutes * 60_000,
       warmupBarsPerSegment: 64,
-      folds: HORIZON_SENSITIVITY.folds,
-      testFractionPerFold: HORIZON_SENSITIVITY.testFractionPerFold,
-      minimumTrainingPoints: HORIZON_SENSITIVITY.minimumTrainingPoints,
-      minimumTestTrades: HORIZON_SENSITIVITY.minimumTestTrades,
-      roundTripCostBps: HORIZON_SENSITIVITY.roundTripCostBps,
-      thresholdZs: [...HORIZON_SENSITIVITY.thresholdZs],
+      folds: LONG_HORIZON_SENSITIVITY.folds,
+      testFractionPerFold: LONG_HORIZON_SENSITIVITY.testFractionPerFold,
+      minimumTrainingPoints: LONG_HORIZON_SENSITIVITY.minimumTrainingPoints,
+      minimumTestTrades: LONG_HORIZON_SENSITIVITY.minimumTestTrades,
+      roundTripCostBps: LONG_HORIZON_SENSITIVITY.roundTripCostBps,
+      thresholdZs: [...LONG_HORIZON_SENSITIVITY.thresholdZs],
     },
   });
   return {
@@ -105,7 +106,7 @@ const horizons = HORIZON_SENSITIVITY.holdMinutes.map((holdMinutes) => {
 });
 
 const batch = {
-  ...HORIZON_SENSITIVITY,
+  ...LONG_HORIZON_SENSITIVITY,
   dataset: horizons[0]!.result.dataset,
   formula: horizons[0]!.result.formula,
   horizons,
@@ -116,7 +117,7 @@ const receipt = { receiptHash, ...batch };
 const receiptDir = path.join(
   researchRoot,
   "results",
-  "historical-albert-horizon-sensitivity",
+  "historical-albert-long-horizon-sensitivity",
 );
 const receiptPath = path.join(
   receiptDir,
