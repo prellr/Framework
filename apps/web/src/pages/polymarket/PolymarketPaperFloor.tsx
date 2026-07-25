@@ -713,12 +713,22 @@ export function PolymarketPaperFloor() {
                   <text x={4} y={y(0) + 3} className="fill-muted-foreground text-[10px]">$0</text>
                   <text x={4} y={y(vMax) + 3} className="fill-muted-foreground text-[10px]">{usd(vMax)}</text>
                   {vMin < 0 && <text x={4} y={y(vMin) + 3} className="fill-muted-foreground text-[10px]">{usd(vMin)}</text>}
-                  {[...byBot.entries()].map(([bot, pts]) => (
-                    <g key={bot}>
-                      <polyline fill="none" stroke={botColor.get(bot) ?? "#888"} strokeWidth={1.1} strokeDasharray="4 3" strokeOpacity={0.4} points={pts.map((p) => `${x(p.t)},${y(p.profitStress)}`).join(" ")} />
-                      <polyline fill="none" stroke={botColor.get(bot) ?? "#888"} strokeWidth={1.8} points={pts.map((p) => `${x(p.t)},${y(p.raw)}`).join(" ")} />
-                    </g>
-                  ))}
+                  {[...byBot.entries()].map(([bot, pts]) => {
+                    const lastPoint = pts[pts.length - 1];
+                    // Equity is cumulative between settlements. Extend only the rendered geometry
+                    // to the common chart edge so a selective strategy reads as flat/abstaining
+                    // instead of looking disabled. The source series and its real timestamps remain
+                    // untouched, and the scrub marker below stays on the last actual grade bucket.
+                    const renderedPoints = lastPoint && lastPoint.t < t1
+                      ? [...pts, { ...lastPoint, t: t1 }]
+                      : pts;
+                    return (
+                      <g key={bot}>
+                        <polyline fill="none" stroke={botColor.get(bot) ?? "#888"} strokeWidth={1.1} strokeDasharray="4 3" strokeOpacity={0.4} points={renderedPoints.map((p) => `${x(p.t)},${y(p.profitStress)}`).join(" ")} />
+                        <polyline fill="none" stroke={botColor.get(bot) ?? "#888"} strokeWidth={1.8} points={renderedPoints.map((p) => `${x(p.t)},${y(p.raw)}`).join(" ")} />
+                      </g>
+                    );
+                  })}
                   <line x1={x(scrubT)} y1={PAD} x2={x(scrubT)} y2={H - PAD} stroke="currentColor" className="text-foreground" strokeWidth={1} strokeDasharray="2 3" strokeOpacity={0.45} />
                   {[...scrubPointByBot.entries()].map(([bot, point]) => (
                     <circle key={bot} cx={x(point.t)} cy={y(point.raw)} r={3} fill={botColor.get(bot) ?? "#888"} stroke="currentColor" className="text-card" strokeWidth={1} />
@@ -727,6 +737,10 @@ export function PolymarketPaperFloor() {
                   <text x={W - PAD - 34} y={H - 6} className="fill-muted-foreground text-[10px]">{new Date(t1).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</text>
                 </svg>
               </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                A flat tail means no newly graded trade. The dot marks the latest actual grade at or
+                before the selected time; extending the line does not create a trade or change P&amp;L.
+              </p>
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                 {chartBots.map((bot) => {
                   const selected = !equityHidden.has(bot.key);

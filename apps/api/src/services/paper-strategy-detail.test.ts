@@ -71,6 +71,14 @@ test("Paper Floor card timeframe controls recompute scoped totals without relabe
   assert.match(paperFloorPage, /openUsd:\s*selected\.reduce/);
 });
 
+test("Paper Floor equity tails remain visually continuous without fabricating ledger points", () => {
+  assert.match(paperFloorPage, /const renderedPoints = lastPoint && lastPoint\.t < t1/);
+  assert.match(paperFloorPage, /\[\.\.\.pts, \{ \.\.\.lastPoint, t: t1 \}\]/);
+  assert.match(paperFloorPage, /The source series and its real timestamps remain/);
+  assert.match(paperFloorPage, /A flat tail means no newly graded trade/);
+  assert.match(paperFloorPage, /extending the line does not create a trade or change P&amp;L/);
+});
+
 test("split registry distinguishes a prospective zero from a collection failure", () => {
   assert.match(strategyLabPage, /split-registry-collection-state/);
   assert.match(strategyLabPage, /Prospective split collection has not started/);
