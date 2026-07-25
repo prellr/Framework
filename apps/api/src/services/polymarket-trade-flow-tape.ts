@@ -1292,7 +1292,9 @@ async function verifyPending() {
     const finishedAt = Date.now();
     const durationMs = finishedAt - startedAt;
     if (
-      durationMs >= AUTHORITATIVE_TRADE_FLOW_TAPE.verifyMs
+      batchReplacementVerified > 0
+      || batchReplacementAmbiguous > 0
+      || durationMs >= AUTHORITATIVE_TRADE_FLOW_TAPE.verifyMs
       || finishedAt - lastVerifierTelemetryAt >= AUTHORITATIVE_TRADE_FLOW_TAPE.verifyTelemetryMs
     ) {
       console.log(

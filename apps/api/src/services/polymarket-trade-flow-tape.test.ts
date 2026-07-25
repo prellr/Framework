@@ -814,3 +814,15 @@ test("retry-lifecycle KB amendment preserves the public, outcome-blind incident 
     assert.doesNotMatch(source, prohibited);
   }
 });
+
+test("replacement verification and ambiguity bypass throttled verifier telemetry", () => {
+  const source = readFileSync(
+    new URL("./polymarket-trade-flow-tape.ts", import.meta.url),
+    "utf8",
+  );
+  const telemetryCondition = source.match(
+    /if \(\s*batchReplacementVerified > 0[\s\S]*?lastVerifierTelemetryAt >= AUTHORITATIVE_TRADE_FLOW_TAPE\.verifyTelemetryMs\s*\)/,
+  );
+  assert.ok(telemetryCondition, "terminal replacement classification must emit immediately");
+  assert.match(telemetryCondition[0], /batchReplacementAmbiguous > 0/);
+});

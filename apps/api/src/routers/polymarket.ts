@@ -17,6 +17,9 @@ import { fourStreakReversalAudit } from "../services/four-streak-reversal-audit.
 import { strategyIndependenceStatus } from "../services/strategy-independence.ts";
 import { completeSetTakerAudit } from "../services/complete-set-taker-audit.ts";
 import { authoritativeTradeFlowTapeStatus } from "../services/polymarket-trade-flow-report.ts";
+import {
+  authoritativeTakerFlowDistributionAudit,
+} from "../services/authoritative-taker-flow-distribution-audit.ts";
 import { smoothPathFunnelStatus } from "../services/smooth-path-funnel-report.ts";
 import { hyperliquidFlowTapeStatus } from "../services/hyperliquid-flow-report.ts";
 import { clobEventOfiTapeStatus } from "../services/clob-event-ofi-report.ts";
@@ -82,6 +85,11 @@ export const polymarketRouter = t.router({
   microstructureTape: protectedProcedure.query(() => polymarketMicrostructureTapeStatus()),
   // Collection progress only: no cross-correlations or signs before LEAD-LAG-REPORT-V1 is ready.
   venueLeadLagTape: protectedProcedure.query(() => venueLeadLagTapeStatus()),
+  // Chain-verified, unsigned liquidity/timing quantiles only. The value query remains unreachable
+  // until the inherited seven-day taker-flow gate passes and cannot expose token or trade direction.
+  authoritativeTakerFlowDistributionAudit: protectedProcedure.query(
+    () => authoritativeTakerFlowDistributionAudit(),
+  ),
   // Outcome-free basis/change/persistence quantiles. The feature query stays unreachable until all
   // six pairs pass the inherited venue-tape row/span/block floor.
   resolutionSourceBasisDistributionAudit: protectedProcedure.query(
