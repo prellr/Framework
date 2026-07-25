@@ -30,8 +30,7 @@ type StrategySortKey =
   | "winRate"
   | "netPerBet"
   | "residualPerBet"
-  | "pnl"
-  | "profitStress";
+  | "pnl";
 type DailySortKey = "day" | "n" | "up" | "down" | "upRate";
 type FeedSortKey = "time" | "strategy" | "side" | "ask" | "edge" | "size" | "pnl" | "status";
 
@@ -161,7 +160,6 @@ export function PolymarketAssetDetailPage() {
     netPerBet: row.netPerBet,
     residualPerBet: row.residualPerBet,
     pnl: row.pnl,
-    profitStress: row.profitStress,
   })[key];
   const strategies = [...strategyRows].sort(
     (a, b) =>
@@ -328,8 +326,7 @@ export function PolymarketAssetDetailPage() {
                     <SortHeader column="winRate" active={strategySort.key} direction={strategySort.direction} onSort={toggleStrategySort} align="right">WR</SortHeader>
                     <SortHeader column="netPerBet" active={strategySort.key} direction={strategySort.direction} onSort={toggleStrategySort} align="right">Net / bet</SortHeader>
                     <SortHeader column="residualPerBet" active={strategySort.key} direction={strategySort.direction} onSort={toggleStrategySort} align="right">Vs control</SortHeader>
-                    <SortHeader column="pnl" active={strategySort.key} direction={strategySort.direction} onSort={toggleStrategySort} align="right">RAW</SortHeader>
-                    <SortHeader column="profitStress" active={strategySort.key} direction={strategySort.direction} onSort={toggleStrategySort} align="right" edge>Stress −36%</SortHeader>
+                    <SortHeader column="pnl" active={strategySort.key} direction={strategySort.direction} onSort={toggleStrategySort} align="right" edge>RAW</SortHeader>
                   </tr>
                 </thead>
                 <tbody>
@@ -354,8 +351,7 @@ export function PolymarketAssetDetailPage() {
                       <td className={`px-3 py-2.5 text-right ${Number(row.residualPerBet) > 0 ? "text-success" : Number(row.residualPerBet) < 0 ? "text-destructive" : ""}`}>
                         {row.residualPerBet == null ? "—" : `${row.residualPerBet >= 0 ? "+" : ""}${(row.residualPerBet * 100).toFixed(1)}¢`}
                       </td>
-                      <td className={`px-3 py-2.5 text-right ${row.pnl > 0 ? "text-success" : row.pnl < 0 ? "text-destructive" : ""}`}>{usd(row.pnl)}</td>
-                      <td className={`px-4 py-2.5 text-right font-medium ${row.profitStress > 0 ? "text-success" : row.profitStress < 0 ? "text-destructive" : ""}`} title="Legacy sensitivity only; winning profit is reduced by 36%.">{usd(row.profitStress)}</td>
+                      <td className={`px-4 py-2.5 text-right ${row.pnl > 0 ? "text-success" : row.pnl < 0 ? "text-destructive" : ""}`}>{usd(row.pnl)}</td>
                     </tr>
                   ))}
                 </tbody>

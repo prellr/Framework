@@ -16,7 +16,7 @@ import {
 } from "./PolymarketSortableHeader";
 
 type ScopeKey = "paper" | "forward" | "history";
-type MetricKey = "stress" | "net" | "avg" | "wr";
+type MetricKey = "net" | "avg" | "wr";
 type ScoreSortKey =
   | "rank"
   | "strategy"
@@ -26,7 +26,6 @@ type ScoreSortKey =
   | "winRate"
   | "netPerBet"
   | "pnl"
-  | "stress"
   | "overlap"
   | "open"
   | "engine";
@@ -58,7 +57,6 @@ const age = (seconds: number | null) =>
   seconds == null ? "—" : seconds < 90 ? `${seconds}s` : seconds < 5_400 ? `${Math.round(seconds / 60)}m` : `${(seconds / 3_600).toFixed(1)}h`;
 
 const METRICS: Record<MetricKey, { label: string; value: (bot: FloorBot) => number }> = {
-  stress: { label: "Profit stress −36%", value: (bot) => bot.profitStressAll },
   net: { label: "Raw net", value: (bot) => bot.pnlAll },
   avg: {
     label: "Net / bet",
@@ -97,7 +95,7 @@ export function PolymarketScoreboard() {
   const seedQuery = trpc.polymarket.scoreboard.useQuery(undefined, { staleTime: 60_000 });
   const [metric, setMetric] = useState<MetricKey>(() => {
     const saved = localStorage.getItem("scoreboard.metric");
-    if (saved === "worst") return "stress";
+    if (saved === "worst" || saved === "stress") return "net";
     return saved && saved in METRICS ? saved as MetricKey : "net";
   });
   const [minN, setMinN] = useState(() => Number(localStorage.getItem("scoreboard.minN") ?? 10));
@@ -160,7 +158,6 @@ export function PolymarketScoreboard() {
       winRate: n ? bot.wins / n : null,
       netPerBet: n ? bot.pnlAll / n : null,
       pnl: bot.pnlAll,
-      stress: bot.profitStressAll,
       overlap: bot.overlapVsFade?.agreement,
       open: bot.openNow,
       engine: bot.engineHeartbeatAgoSec,
@@ -230,8 +227,8 @@ export function PolymarketScoreboard() {
             <h2 className="text-xl font-semibold tracking-tight">One comparable scoreboard for every registered strategy</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               RAW uses the fee-adjusted $5 book-walk VWAP captured at decision time and binary settlement.
-              The legacy profit stress merely discounts winning profit by 36%; it is uncalibrated, is not an
-              execution model, and is not used by the verdict gate.
+              Fee, depth, preparation latency, stake capacity, and overlapping capital now live in the
+              dedicated Execution &amp; Capital view.
             </p>
           </div>
           <div className="flex flex-wrap gap-1 rounded-lg border bg-muted/20 p-1 text-xs">
@@ -341,7 +338,6 @@ export function PolymarketScoreboard() {
                   <PolymarketSortableHeader column="winRate" active={scoreSort.key} direction={scoreSort.direction} onSort={sortScore} align="right" className="px-3 py-2.5 font-medium">Win</PolymarketSortableHeader>
                   <PolymarketSortableHeader column="netPerBet" active={scoreSort.key} direction={scoreSort.direction} onSort={sortScore} align="right" className="px-3 py-2.5 font-medium">Net / bet</PolymarketSortableHeader>
                   <PolymarketSortableHeader column="pnl" active={scoreSort.key} direction={scoreSort.direction} onSort={sortScore} align="right" className="px-3 py-2.5 font-medium">Raw net</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="stress" active={scoreSort.key} direction={scoreSort.direction} onSort={sortScore} align="right" className="px-3 py-2.5 font-medium" title="Legacy sensitivity: winning profit reduced by 36%. Uncalibrated and not a verdict input.">Stress −36%</PolymarketSortableHeader>
                   <PolymarketSortableHeader column="overlap" active={scoreSort.key} direction={scoreSort.direction} onSort={sortScore} align="right" className="px-3 py-2.5 font-medium">Overlap</PolymarketSortableHeader>
                   <PolymarketSortableHeader column="open" active={scoreSort.key} direction={scoreSort.direction} onSort={sortScore} align="right" className="px-3 py-2.5 font-medium">Open</PolymarketSortableHeader>
                   <PolymarketSortableHeader column="engine" active={scoreSort.key} direction={scoreSort.direction} onSort={sortScore} align="right" initialDirection="asc" className="px-4 py-2.5 font-medium">Engine</PolymarketSortableHeader>
@@ -398,9 +394,6 @@ export function PolymarketScoreboard() {
                       <td className={`px-3 py-3 text-right ${bot.pnlAll > 0 ? "text-success" : bot.pnlAll < 0 ? "text-destructive" : "text-muted-foreground"}`}>
                         {usd(bot.pnlAll)}
                       </td>
-                      <td className={`px-3 py-3 text-right font-medium ${bot.profitStressAll > 0 ? "text-success" : bot.profitStressAll < 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                        {usd(bot.profitStressAll)}
-                      </td>
                       <td className="px-3 py-3 text-right text-muted-foreground">
                         {bot.overlapVsFade?.agreement == null ? "—" : `${percent(bot.overlapVsFade.agreement)} · ${bot.overlapVsFade.shared}`}
                       </td>
@@ -430,10 +423,9 @@ export function PolymarketScoreboard() {
               const members = bots.filter((bot) => strategyMeta(bot.key).family === family);
               const n = members.reduce((sum, bot) => sum + bot.wins + bot.losses, 0);
               const net = members.reduce((sum, bot) => sum + bot.pnlAll, 0);
-              const profitStress = members.reduce((sum, bot) => sum + bot.profitStressAll, 0);
               const active = members.filter((bot) => bot.wins + bot.losses + bot.openNow > 0).length;
               return (
-                <div key={family} className="grid items-center gap-2 px-4 py-3 sm:grid-cols-[minmax(180px,1fr)_120px_140px_140px]">
+                <div key={family} className="grid items-center gap-2 px-4 py-3 sm:grid-cols-[minmax(180px,1fr)_120px_140px]">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full" style={{ background: FAMILY_META[family].color }} />
                     <div>
@@ -443,7 +435,6 @@ export function PolymarketScoreboard() {
                   </div>
                   <div className="text-xs text-muted-foreground sm:text-right"><span className="font-mono text-foreground">{n}</span> graded</div>
                   <div className={`text-xs sm:text-right ${net > 0 ? "text-success" : net < 0 ? "text-destructive" : "text-muted-foreground"}`}>raw {usd(net)}</div>
-                  <div className={`text-xs font-medium sm:text-right ${profitStress > 0 ? "text-success" : profitStress < 0 ? "text-destructive" : "text-muted-foreground"}`}>stress −36% {usd(profitStress)}</div>
                 </div>
               );
             })}

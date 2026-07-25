@@ -16,6 +16,7 @@ import {
   stableSortRows,
   type SortState,
 } from "./PolymarketSortableHeader";
+import { formatElapsedDays } from "./polymarket-age";
 import { FAMILY_META, strategyMeta } from "./polymarket-strategy-meta";
 
 type ScopeKey = "paper" | "forward" | "history";
@@ -366,7 +367,7 @@ export function PolymarketStrategyDetailPage() {
           <div>
             {scoped.fromMs == null
               ? "all captured rows"
-              : `from ${new Date(scoped.fromMs).toLocaleString()}`}
+              : `${formatElapsedDays(scoped.fromMs)} selected history · from ${new Date(scoped.fromMs).toLocaleString()}`}
           </div>
           <div>
             {selectedAssets.length === ASSETS.length ? "all 6 assets" : selectedAssets.join(", ")} ·
@@ -384,23 +385,11 @@ export function PolymarketStrategyDetailPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <Metric
           label={`RAW net · $${stakeUsd}`}
           value={usd(cohort == null ? null : cohort.pnl * stakeScale)}
           tone={Number(cohort?.pnl) > 0 ? "good" : Number(cohort?.pnl) < 0 ? "bad" : "neutral"}
-        />
-        <Metric
-          label={`Profit stress −36% · $${stakeUsd}`}
-          value={usd(cohort == null ? null : cohort.profitStress * stakeScale)}
-          sub="legacy sensitivity; not a verdict input"
-          tone={
-            Number(cohort?.profitStress) > 0
-              ? "good"
-              : Number(cohort?.profitStress) < 0
-                ? "bad"
-                : "neutral"
-          }
         />
         <Metric label="Graded" value={`${wins}W / ${losses}L`} sub={pct(cohort?.winRate)} />
         <Metric
@@ -434,7 +423,7 @@ export function PolymarketStrategyDetailPage() {
           value={String(observedLedgerDates)}
           sub={
             selectedGate
-              ? `${cohort?.activeDays ?? 0} in ${sliceLabel} · gate ${gateSpanDays.toFixed(2)}d / ${selectedGate.state}`
+              ? `${cohort?.activeDays ?? 0} in ${sliceLabel} · observed gate span ${gateSpanDays.toFixed(2)}d / ${selectedGate.state}`
               : `${cohort?.activeDays ?? 0} in ${sliceLabel} · ${family.short} · ${meta.origin}`
           }
         />

@@ -55,6 +55,7 @@ test("scoreboard view selects one scope and strips hidden floor-only collections
   assert.equal(view.scope.dailyLedger.rows.length, 1);
   assert.equal(view.familywiseGate.version, "familywise");
   assert.equal(view.engineRuntime.status, "ok");
+  assert.equal(view.paperLedgerStartMs, 1);
   assert.equal("scopes" in view, false);
 });
 

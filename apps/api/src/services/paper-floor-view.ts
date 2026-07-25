@@ -31,6 +31,7 @@ export function projectPaperFloorView(
     macroLeader: state.macroLeader,
     engineRuntime: state.engineRuntime,
     enabled: state.enabled,
+    paperLedgerStartMs: state.scopes.paper.fromMs,
     scope: {
       ...selected,
       equity: includeFloorDetail ? selected.equity : [],

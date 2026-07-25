@@ -11,12 +11,13 @@ import {
   type SortState,
   type SortValue,
 } from "./PolymarketSortableHeader";
+import { formatElapsedDays } from "./polymarket-age";
 
 type ScopeKey = "paper" | "forward" | "history";
 type PeriodKey = "24h" | "3d" | "7d" | "30d" | "all";
 type TimeframeKey = "split" | "5" | "15" | "combined";
-type MetricKey = "profitStress" | "pnl" | "netPerBet" | "residualPerBet" | "winRate";
-type SegmentSortKey = "slice" | "n" | "days" | "winRate" | "pnl" | "residual" | "stress";
+type MetricKey = "pnl" | "netPerBet" | "residualPerBet" | "winRate";
+type SegmentSortKey = "slice" | "n" | "days" | "winRate" | "pnl" | "residual";
 type CohortSortKey =
   | "rank"
   | "strategy"
@@ -27,8 +28,7 @@ type CohortSortKey =
   | "winRate"
   | "netPerBet"
   | "residual"
-  | "pnl"
-  | "stress";
+  | "pnl";
 
 type Cohort = {
   key: string;
@@ -84,7 +84,6 @@ const pct = (value: number | null | undefined) =>
   value == null ? "—" : `${Math.round(value * 100)}%`;
 const metricValue = (row: Cohort, metric: MetricKey) => row[metric] ?? Number.NEGATIVE_INFINITY;
 const metricLabel: Record<MetricKey, string> = {
-  profitStress: "Profit stress −36%",
   pnl: "Raw net",
   netPerBet: "Net / bet",
   residualPerBet: "Vs control",
@@ -154,7 +153,6 @@ export function PolymarketSegmentTable({
       winRate: row.winRate,
       pnl: row.pnl,
       residual: row.residualPerBet,
-      stress: row.profitStress,
     })[key];
   const sortedRows = stableSortRows(rows, (row) => value(row, sort.key), sort.direction);
   const onSort = (key: SegmentSortKey, initialDirection: "asc" | "desc" = "desc") =>
@@ -229,17 +227,6 @@ export function PolymarketSegmentTable({
             >
               Vs ctrl
             </PolymarketSortableHeader>
-            <PolymarketSortableHeader
-              column="stress"
-              active={sort.key}
-              direction={sort.direction}
-              onSort={onSort}
-              align="right"
-              className="px-3 py-1.5 font-medium"
-              title="Legacy sensitivity only; winning profit is reduced by 36%."
-            >
-              Stress −36%
-            </PolymarketSortableHeader>
           </tr>
         </thead>
         <tbody>
@@ -266,17 +253,12 @@ export function PolymarketSegmentTable({
                     ? "—"
                     : `${row.residualPerBet >= 0 ? "+" : ""}${(row.residualPerBet * stakeScale * 100).toFixed(1)}¢`}
                 </td>
-                <td
-                  className={`px-3 py-1.5 text-right ${row.profitStress > 0 ? "text-success" : row.profitStress < 0 ? "text-destructive" : ""}`}
-                >
-                  {usd(row.profitStress * stakeScale)}
-                </td>
               </tr>
             );
           })}
           {!rows.length && (
             <tr>
-              <td colSpan={7} className="text-muted-foreground px-3 py-6 text-center">
+              <td colSpan={6} className="text-muted-foreground px-3 py-6 text-center">
                 No graded rows.
               </td>
             </tr>
@@ -326,9 +308,9 @@ export function PolymarketPerformanceLens({
   });
   const [metric, setMetric] = useState<MetricKey>(() => {
     const saved = localStorage.getItem("scoreboard.performanceMetric");
-    if (saved === "worst") return "profitStress";
+    if (saved === "worst" || saved === "profitStress") return "pnl";
     return saved &&
-      ["profitStress", "pnl", "netPerBet", "residualPerBet", "winRate"].includes(saved)
+      ["pnl", "netPerBet", "residualPerBet", "winRate"].includes(saved)
       ? (saved as MetricKey)
       : "residualPerBet";
   });
@@ -428,7 +410,6 @@ export function PolymarketPerformanceLens({
       netPerBet: row.netPerBet,
       residual: row.residualPerBet,
       pnl: row.pnl,
-      stress: row.profitStress,
     }[key];
   };
   const cohortRows = stableSortRows(
@@ -542,12 +523,12 @@ export function PolymarketPerformanceLens({
               <span>
                 {data.fromMs == null
                   ? "all captured history"
-                  : `from ${new Date(data.fromMs).toLocaleString()}`}
+                  : `selected data age ${formatElapsedDays(data.fromMs)} · from ${new Date(data.fromMs).toLocaleString()}`}
               </span>
               <span>·</span>
               <span>
-                familywise gate starts{" "}
-                {new Date(familywiseGate.constants.evalStartMs).toLocaleString()}
+                familywise gate age {formatElapsedDays(familywiseGate.constants.evalStartMs)}
+                {" · "}from {new Date(familywiseGate.constants.evalStartMs).toLocaleString()}
               </span>
               <span>· {familywiseGate.familySize} frozen hypotheses</span>
               <span className="ml-auto">{data.note}</span>
@@ -669,17 +650,6 @@ export function PolymarketPerformanceLens({
                     >
                       Raw net
                     </PolymarketSortableHeader>
-                    <PolymarketSortableHeader
-                      column="stress"
-                      active={cohortSort.key}
-                      direction={cohortSort.direction}
-                      onSort={sortCohorts}
-                      align="right"
-                      className="px-4 py-2 font-medium"
-                      title="Legacy sensitivity only; winning profit is reduced by 36%."
-                    >
-                      Stress −36%
-                    </PolymarketSortableHeader>
                   </tr>
                 </thead>
                 <tbody>
@@ -766,11 +736,6 @@ export function PolymarketPerformanceLens({
                           className={`px-3 py-2.5 text-right ${row.pnl > 0 ? "text-success" : row.pnl < 0 ? "text-destructive" : ""}`}
                         >
                           {usd(row.pnl)}
-                        </td>
-                        <td
-                          className={`px-4 py-2.5 text-right font-medium ${row.profitStress > 0 ? "text-success" : row.profitStress < 0 ? "text-destructive" : ""}`}
-                        >
-                          {usd(row.profitStress)}
                         </td>
                       </tr>
                     );

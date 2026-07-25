@@ -33,6 +33,7 @@ import { resolutionSourceBasisDistributionAudit } from "../services/resolution-s
 import { idNr4QualityDistributionAudit } from "../services/id-nr4-quality-distribution.ts";
 import { z } from "zod";
 import { paperPerformance } from "../services/paper-performance.ts";
+import { paperExecutionCapital } from "../services/paper-execution-capital.ts";
 
 /**
  * Polymarket Up/Down (Phase 1, read-only research). The scoreboard aggregates our forward-collected
@@ -99,6 +100,18 @@ export const polymarketRouter = t.router({
       }),
     )
     .query(({ input }) => paperPerformance(input)),
+  // Dedicated paper-only execution-cost and capital-efficiency projection. It reads captured book
+  // walks, fees, depth, and strategy overlap; no credential, balance, signing, or order path exists.
+  executionCapital: protectedProcedure
+    .input(
+      z.object({
+        scope: z.enum(["paper", "forward", "history"]).default("paper"),
+        period: z.enum(["24h", "3d", "7d", "30d", "all"]).default("all"),
+        horizon: z.union([z.literal("all"), z.literal(5), z.literal(15)]).default("all"),
+        timezone: z.string().min(1).max(64).default("America/Chicago"),
+      }),
+    )
+    .query(({ input }) => paperExecutionCapital(input)),
   // Raw prospective research-tape readiness only; no outcome-conditioned diagnostics before its floor.
   microstructureTape: protectedProcedure.query(() => polymarketMicrostructureTapeStatus()),
   // Same-book $5/$10/$20 depth coverage only; no outcomes, strategy evidence, or execution path.

@@ -12,10 +12,11 @@ import {
   stableSortRows,
   type SortState,
 } from "./PolymarketSortableHeader";
+import { formatElapsedDays } from "./polymarket-age";
 
 /**
  * Paper Floor — Cobra-style live paper-trading dashboard. Bot cards (heartbeat, today, ledger),
- * per-bot equity curves (solid raw / dashed legacy profit stress), and the trade feed. PAPER ONLY: the "live"
+ * per-bot RAW equity curves, and the trade feed. PAPER ONLY: the "live"
  * slot on every card is a locked placeholder — the Polymarket flow exposes no execution endpoint, and
  * execution only becomes a separate conversation/build after a verdict-gate PASS.
  */
@@ -149,7 +150,6 @@ export function paperBotActivityLine(activity: FloorBotActivity): {
 /** Success metrics the floor can rank/filter by — a data list so new lenses are one-line adds. */
 const METRICS: { key: string; label: string; value: (b: FloorBot) => number; fmt: (b: FloorBot) => string }[] = [
   { key: "net", label: "Net $", value: (b) => b.pnlAll, fmt: (b) => usd(b.pnlAll) },
-  { key: "stress", label: "Profit stress −36%", value: (b) => b.profitStressAll, fmt: (b) => usd(b.profitStressAll) },
   { key: "wr", label: "Win %", value: (b) => (b.wins + b.losses ? b.wins / (b.wins + b.losses) : -1), fmt: (b) => (b.wins + b.losses ? `${Math.round((100 * b.wins) / (b.wins + b.losses))}%` : "—") },
   { key: "avg", label: "Net/bet", value: (b) => (b.wins + b.losses ? b.pnlAll / (b.wins + b.losses) : -Infinity), fmt: (b) => (b.wins + b.losses ? usd(b.pnlAll / (b.wins + b.losses)) : "—") },
   { key: "today", label: "Today $", value: (b) => b.pnlToday, fmt: (b) => usd(b.pnlToday) },
@@ -232,6 +232,8 @@ export function PolymarketPaperFloor() {
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading floor…</p>;
   if (!response) return <p className="text-sm text-muted-foreground">Floor unavailable.</p>;
   const d = { ...response, ...response.scope };
+  const paperHistoryStartMs = response.paperLedgerStartMs;
+  const familywiseStartMs = response.familywiseGate.constants.evalStartMs;
   const engineAge = response.engineRuntime.ageSec == null
     ? null
     : Math.round(response.engineRuntime.ageSec);
@@ -347,7 +349,7 @@ export function PolymarketPaperFloor() {
   const chartBots = overviewBots.filter((bot) => isVisible(bot.key) && equityBotKeys.has(bot.key));
   const isEquityVisible = (key: string) => isVisible(key) && !equityHidden.has(key);
   const t0 = eq.length ? eq[0].t : 0, t1 = eq.length ? eq[eq.length - 1].t : 1;
-  const allV = eq.filter((p) => isEquityVisible(p.bot)).flatMap((p) => [p.raw, p.profitStress]);
+  const allV = eq.filter((p) => isEquityVisible(p.bot)).map((p) => p.raw);
   const vMin = Math.min(0, ...allV), vMax = Math.max(0.01, ...allV);
   const x = (t: number) => PAD + ((t - t0) / Math.max(1, t1 - t0)) * (W - 2 * PAD);
   const y = (v: number) => H - PAD - ((v - vMin) / Math.max(1e-6, vMax - vMin)) * (H - 2 * PAD);
@@ -533,9 +535,16 @@ export function PolymarketPaperFloor() {
                   {verdictRows.filter(({ bot }) => bot.state === "passing").length} passing · {verdictRows.filter(({ bot }) => bot.state === "collecting").length} collecting · {verdictRows.filter(({ bot }) => bot.state === "waiting").length} waiting · {verdictRows.filter(({ bot }) => bot.state === "failing").length} failing
                 </p>
               ) : (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Non-macro rows compare with same-tick Always Down; macro UP/DOWN use the same-tick opposite side. Pass requires ≥{d.familywiseGate.constants.minMarkets.toLocaleString()} markets over ≥{d.familywiseGate.constants.minSpanDays}d, ≥{d.familywiseGate.constants.minBets} graded pairs, ≥{d.familywiseGate.constants.minClusters} independent clusters, residual ≥{cents(d.familywiseGate.constants.minResidual)} with cluster-bootstrap 95% CI above zero, positive residual in ≥{d.familywiseGate.constants.sessionsNeeded} UK sessions, and Holm-adjusted p ≤ {d.familywiseGate.constants.alpha}. Unready hypotheses remain in the full family as p=1.
-                </p>
+                <>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Paper ledger age {formatElapsedDays(paperHistoryStartMs)}
+                    {" · "}familywise gate age {formatElapsedDays(familywiseStartMs)}
+                    {" · "}a card's observed span runs only from its first to last eligible gate observation.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Non-macro rows compare with same-tick Always Down; macro UP/DOWN use the same-tick opposite side. Pass requires ≥{d.familywiseGate.constants.minMarkets.toLocaleString()} markets over ≥{d.familywiseGate.constants.minSpanDays}d, ≥{d.familywiseGate.constants.minBets} graded pairs, ≥{d.familywiseGate.constants.minClusters} independent clusters, residual ≥{cents(d.familywiseGate.constants.minResidual)} with cluster-bootstrap 95% CI above zero, positive residual in ≥{d.familywiseGate.constants.sessionsNeeded} UK sessions, and Holm-adjusted p ≤ {d.familywiseGate.constants.alpha}. Unready hypotheses remain in the full family as p=1.
+                  </p>
+                </>
               )}
             </div>
             <button
@@ -560,7 +569,7 @@ export function PolymarketPaperFloor() {
             }[gateBot.state];
             const requirements = [
               `${gateBot.markets}/${constants.minMarkets} mkts`,
-              `${gateBot.spanDays.toFixed(1)}/${constants.minSpanDays}d`,
+              `observed span ${gateBot.spanDays.toFixed(2)}/${constants.minSpanDays}d`,
               `${gateBot.bets}/${constants.minBets} graded pairs`,
               `${gateBot.qualifyingSessions}/${constants.sessionsNeeded} sessions`,
             ];
@@ -719,7 +728,6 @@ export function PolymarketPaperFloor() {
                   </div>
                 )}
                 <div className="flex justify-between"><dt className="text-muted-foreground">ledger RAW</dt><dd className={b.pnlAll > 0 ? "text-success" : b.pnlAll < 0 ? "text-destructive" : ""}>{usd(b.pnlAll)}</dd></div>
-                <div className="flex justify-between" title="Legacy sensitivity only: winning profit is reduced by 36%. It is not calibrated, is not an execution model, and does not affect the verdict."><dt className="text-muted-foreground">profit stress −36%</dt><dd className={b.profitStressAll > 0 ? "text-success" : b.profitStressAll < 0 ? "text-destructive" : "text-muted-foreground"}>{usd(b.profitStressAll)}</dd></div>
               </dl>
               {b.buckets.length > 0 && (
                 <PaperFloorBucketTable
@@ -745,7 +753,7 @@ export function PolymarketPaperFloor() {
       <Card>
         <CardHeader className="p-4 pb-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <CardTitle className="text-base">Paper equity <span className="ml-1 text-xs font-normal text-muted-foreground">realized P&amp;L per bot · solid = RAW, dashed = legacy winning-profit stress −36%</span></CardTitle>
+            <CardTitle className="text-base">Paper equity <span className="ml-1 text-xs font-normal text-muted-foreground">realized fee-adjusted RAW P&amp;L per bot</span></CardTitle>
             {equityTimes.length > 0 && (
               <button
                 type="button"
@@ -824,7 +832,6 @@ export function PolymarketPaperFloor() {
                       : pts;
                     return (
                       <g key={bot}>
-                        <polyline fill="none" stroke={botColor.get(bot) ?? "#888"} strokeWidth={1.1} strokeDasharray="4 3" strokeOpacity={0.4} points={renderedPoints.map((p) => `${x(p.t)},${y(p.profitStress)}`).join(" ")} />
                         <polyline fill="none" stroke={botColor.get(bot) ?? "#888"} strokeWidth={1.8} points={renderedPoints.map((p) => `${x(p.t)},${y(p.raw)}`).join(" ")} />
                       </g>
                     );
@@ -975,7 +982,6 @@ export function PolymarketPaperFloor() {
           { k: "winRate", label: "WR", num: (c) => c.winRate ?? -1, fmt: (c) => (c.winRate == null ? "—" : `${Math.round(c.winRate * 100)}%`), right: true },
           { k: "avg", label: "Net/bet", num: (c) => c.avg, fmt: (c) => usd(c.avg), right: true },
           { k: "pnl", label: "Net $", num: (c) => c.pnl, fmt: (c) => usd(c.pnl), right: true },
-          { k: "profitStress", label: "Stress −36%", num: (c) => c.profitStress, fmt: (c) => usd(c.profitStress), right: true },
           { k: "openNow", label: "Open", num: (c) => c.openNow, fmt: (c) => (c.openNow ? String(c.openNow) : "—"), right: true },
         ];
         const all = (d.combos ?? []).filter((c: any) => isVisible(c.botKey));
@@ -1029,7 +1035,7 @@ export function PolymarketPaperFloor() {
                         </td>
                         <td className="p-2.5 text-muted-foreground">{c.horizonMin}m</td>
                         {cols.map((col2) => {
-                          const signed = col2.k === "avg" || col2.k === "pnl" || col2.k === "profitStress";
+                          const signed = col2.k === "avg" || col2.k === "pnl";
                           const v = col2.num(c);
                           return <td key={col2.k} className={"p-2.5 text-right " + (signed ? (v > 0 ? "text-success" : v < 0 ? "text-destructive" : "text-muted-foreground") : "")}>{col2.fmt(c)}</td>;
                         })}

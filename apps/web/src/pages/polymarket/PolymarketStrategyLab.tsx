@@ -20,6 +20,7 @@ import {
   type SortValue,
 } from "./PolymarketSortableHeader";
 import { FAMILY_META, strategyMeta, type StrategyFamily } from "./polymarket-strategy-meta";
+import { formatElapsedDays } from "./polymarket-age";
 
 type AuditState = "scheduled" | "collecting" | "ready" | "degraded" | "unavailable";
 type AuditView = {
@@ -975,6 +976,8 @@ export function PolymarketStrategyLab() {
     (gate) => gate.markets > 0 || gate.decisions > 0 || gate.bets > 0,
   ).length;
   const splitCollectionStarted = Date.now() >= response.familywiseGate.constants.evalStartMs;
+  const paperHistoryStartMs = response.paperLedgerStartMs;
+  const familywiseStartMs = response.familywiseGate.constants.evalStartMs;
   const registryRows = (registryView === "split" ? splitRows : pooledRows).filter(
     ({ bot }) => family === "all" || strategyMeta(bot.key).family === family,
   );
@@ -1153,7 +1156,14 @@ export function PolymarketStrategyLab() {
                 {response.familywiseGate.version}
               </div>
               <div className="text-muted-foreground text-[11px]">
-                familywise starts {new Date(response.familywiseGate.constants.evalStartMs).toLocaleString()}
+                Paper ledger age {formatElapsedDays(paperHistoryStartMs)}
+                {paperHistoryStartMs == null
+                  ? ""
+                  : ` · since ${new Date(paperHistoryStartMs).toLocaleString()}`}
+              </div>
+              <div className="text-muted-foreground text-[11px]">
+                Familywise gate age {formatElapsedDays(familywiseStartMs)}
+                {" · "}since {new Date(familywiseStartMs).toLocaleString()}
               </div>
             </div>
             <div className="p-4">
@@ -1244,7 +1254,7 @@ export function PolymarketStrategyLab() {
                 ? `Prospective split collection has not started. The frozen boundary opens ${new Date(response.familywiseGate.constants.evalStartMs).toLocaleString()}; zeros before that time are expected and are not missing history.`
                 : splitPopulated === 0
                   ? `No post-boundary split evidence has been recorded since ${new Date(response.familywiseGate.constants.evalStartMs).toLocaleString()}. Treat this as an operational collection warning, not a zero-performance result.`
-                  : `Post-boundary split collection is active. ${splitPopulated}/${response.familywiseGate.familySize} frozen strategy × timeframe cohorts currently contain market, capture, or grade observations.`}
+                  : `Post-boundary split collection is active. Familywise gate age ${formatElapsedDays(familywiseStartMs)}; ${splitPopulated}/${response.familywiseGate.familySize} frozen strategy × timeframe cohorts currently contain market, capture, or grade observations. Each row's observed span runs from its first to last eligible observation and can be shorter than this clock.`}
             </div>
           )}
           <div className="overflow-x-auto">
