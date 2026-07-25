@@ -15,6 +15,8 @@ import {
   type FormulaPoint,
 } from "./formulaic-fixed-horizon-poc.ts";
 import { LEGACY_ALBERT_FORMULA_RESEARCH } from "./legacy-formula-research.ts";
+import { HISTORICAL_ALBERT_REPLAY_RECEIPT } from "./historical-albert-replay-receipt.ts";
+import { formulaOperatorCatalogStatus } from "./formula-operator-catalog.ts";
 
 const SYNTHETIC_CONFIG = {
   holdMs: FORMULAIC_FIXED_HORIZON_POC.target.holdSeconds * 1_000,
@@ -75,6 +77,7 @@ export function formulaLabStatus() {
     targetAdapters: FORMULAIC_FIXED_HORIZON_POC.targetAdapters,
     features: FORMULAIC_FIXED_HORIZON_POC.features,
     grammar: FORMULAIC_FIXED_HORIZON_POC.grammar,
+    operatorCatalog: formulaOperatorCatalogStatus(),
     search: FORMULAIC_FIXED_HORIZON_POC.search,
     validation: FORMULAIC_FIXED_HORIZON_POC.validation,
     prerequisitesForLiveData:
@@ -91,6 +94,7 @@ export function formulaLabStatus() {
       depth: formulaDepth(candidate.expression),
     })),
     historicalFormulaResearch: LEGACY_ALBERT_FORMULA_RESEARCH,
+    historicalReplay: HISTORICAL_ALBERT_REPLAY_RECEIPT,
     proof: {
       mode: "planted-signal synthetic mechanics test",
       isMarketEvidence: false,

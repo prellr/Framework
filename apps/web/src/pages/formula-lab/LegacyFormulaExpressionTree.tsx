@@ -26,9 +26,9 @@ type PositionedNode = {
 };
 
 const operatorDetails: Record<string, string> = {
-  Less: "left < right",
-  Max: "maximum",
-  WMA: "weighted mean",
+  Less: "element-wise minimum",
+  Max: "rolling maximum",
+  WMA: "Qlib v0.9.5 legacy WMA",
   Ref: "completed-bar lag",
   Mul: "multiply",
   Cov: "rolling covariance",

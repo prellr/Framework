@@ -41,6 +41,18 @@ test("legacy formula metadata is deterministic and non-authorizing", () => {
   assert.equal(LEGACY_ALBERT_FORMULA_RESEARCH.invariants.startsSearch, false);
   assert.equal(LEGACY_ALBERT_FORMULA_RESEARCH.invariants.enablesExecution, false);
   assert.equal(LEGACY_ALBERT_FORMULA_RESEARCH.invariants.preservesVerdictGate, true);
+  assert.equal(LEGACY_ALBERT_FORMULA_RESEARCH.semantics.version, "v0.9.5");
+  assert.match(
+    LEGACY_ALBERT_FORMULA_RESEARCH.operators.find((operator) => operator.name === "Less")?.detail
+      ?? "",
+    /numeric operator.*smaller value/i,
+  );
+  assert.match(
+    LEGACY_ALBERT_FORMULA_RESEARCH.operators.find((operator) => operator.name === "Max")?.detail
+      ?? "",
+    /rolling operator/i,
+  );
+  assert.doesNotMatch(LEGACY_ALBERT_FORMULA_RESEARCH.interpretation.join(" "), /Less predicate/);
 });
 
 test("legacy parser rejects code-like or trailing input", () => {

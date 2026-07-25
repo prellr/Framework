@@ -14,6 +14,15 @@ test("Formula Lab status exposes the complete deterministic trial universe", () 
   assert.ok(status.targetAdapters.some((adapter) => adapter.key === "hyperliquid-perp-paper"));
   assert.ok(status.targetAdapters.some((adapter) => adapter.key === "polymarket-down-paper"));
   assert.equal(status.candidates.length, 33);
+  assert.equal(status.operatorCatalog.version, "alchemy-formula-operator-catalog-v1");
+  assert.equal(
+    status.operatorCatalog.counts.activeSearch,
+    2
+      + status.grammar.unaryOperators.length
+      + status.grammar.binaryOperators.length,
+  );
+  assert.ok(status.operatorCatalog.counts.candidate >= 10);
+  assert.equal(status.operatorCatalog.invariants.candidateChangesGenerator, false);
   assert.equal(new Set(status.candidates.map((candidate) => candidate.id)).size, 33);
   assert.ok(status.candidates.every((candidate) => candidate.expression));
   assert.ok(status.candidates.every((candidate) => candidate.depth >= 1));
@@ -21,6 +30,12 @@ test("Formula Lab status exposes the complete deterministic trial universe", () 
   assert.equal(status.proof.candidatesEvaluated, 33);
   assert.equal(status.proof.folds.length, 4);
   assert.equal(status.proof.isMarketEvidence, false);
+  assert.equal(status.historicalReplay.dataset.rows, 102_267);
+  assert.equal(status.historicalReplay.trials.length, 7);
+  assert.equal(status.historicalReplay.trials.filter((trial) => trial.available).length, 2);
+  assert.ok(status.historicalReplay.trials.every((trial) => trial.positiveFolds === 0));
+  assert.equal(status.historicalReplay.invariants.registersStrategy, false);
+  assert.equal(status.historicalReplay.invariants.enablesExecution, false);
 });
 
 test("planted proof passes mechanics while remaining explicitly non-market evidence", () => {

@@ -35,7 +35,16 @@ type VenuePreview = RouterOutput["formulaLab"]["venuePreview"];
 type Candidate = FormulaLab["candidates"][number];
 type Fold = FormulaLab["proof"]["folds"][number];
 type VenueTrial = VenuePreview["trials"][number];
+type HistoricalTrial = FormulaLab["historicalReplay"]["trials"][number];
+type FormulaOperator = FormulaLab["operatorCatalog"]["operators"][number];
 type CandidateSortKey = "id" | "formula" | "threshold" | "complexity";
+type OperatorSortKey =
+  | "label"
+  | "category"
+  | "state"
+  | "arity"
+  | "lookback"
+  | "cost";
 type FoldSortKey =
   | "fold"
   | "selected"
@@ -55,6 +64,16 @@ type VenueSortKey =
   | "grossMean"
   | "netMean"
   | "hitRate";
+type HistoricalSortKey =
+  | "trial"
+  | "status"
+  | "trades"
+  | "gross"
+  | "net"
+  | "hitRate"
+  | "positiveFolds"
+  | "worstFold"
+  | "finalEquity";
 
 const bps = (value: number | null) =>
   value == null ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)} bps`;
@@ -94,6 +113,31 @@ function venueValue(row: VenueTrial, key: VenueSortKey): SortValue {
     case "grossMean": return row.meanGrossBps;
     case "netMean": return row.meanNetBps;
     case "hitRate": return row.hitRate;
+  }
+}
+
+function historicalValue(row: HistoricalTrial, key: HistoricalSortKey): SortValue {
+  switch (key) {
+    case "trial": return row.id;
+    case "status": return row.available ? 1 : 0;
+    case "trades": return row.trades;
+    case "gross": return row.meanGrossBps;
+    case "net": return row.meanNetBps;
+    case "hitRate": return row.hitRate;
+    case "positiveFolds": return row.positiveFolds;
+    case "worstFold": return row.worstFoldMeanNetBps;
+    case "finalEquity": return row.finalEquityUsd;
+  }
+}
+
+function operatorValue(row: FormulaOperator, key: OperatorSortKey): SortValue {
+  switch (key) {
+    case "label": return row.label;
+    case "category": return row.category;
+    case "state": return row.state;
+    case "arity": return row.arity;
+    case "lookback": return row.lookback;
+    case "cost": return row.computeCost;
   }
 }
 
@@ -152,6 +196,17 @@ export function FormulaLabPage() {
     key: "pair",
     direction: "asc",
   });
+  const [historicalSort, setHistoricalSort] = useState<SortState<HistoricalSortKey>>({
+    key: "net",
+    direction: "desc",
+  });
+  const [operatorSort, setOperatorSort] = useState<SortState<OperatorSortKey>>({
+    key: "state",
+    direction: "asc",
+  });
+  const [operatorState, setOperatorState] = useState<
+    "all" | FormulaOperator["state"]
+  >("all");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const candidates = useMemo(
     () =>
@@ -179,6 +234,26 @@ export function FormulaLabPage() {
         venueSort.direction,
       ),
     [venuePreview.data, venueSort],
+  );
+  const historicalTrials = useMemo(
+    () =>
+      stableSortRows(
+        lab.data?.historicalReplay.trials ?? [],
+        (row) => historicalValue(row, historicalSort.key),
+        historicalSort.direction,
+      ),
+    [historicalSort, lab.data],
+  );
+  const operators = useMemo(
+    () =>
+      stableSortRows(
+        (lab.data?.operatorCatalog.operators ?? []).filter(
+          (operator) => operatorState === "all" || operator.state === operatorState,
+        ),
+        (row) => operatorValue(row, operatorSort.key),
+        operatorSort.direction,
+      ),
+    [lab.data, operatorSort, operatorState],
   );
   const selectedCandidate =
     candidates.find((candidate) => candidate.id === selectedCandidateId)
@@ -216,6 +291,14 @@ export function FormulaLabPage() {
     key: VenueSortKey,
     initialDirection: "asc" | "desc" = "asc",
   ) => setVenueSort((current) => nextSortState(current, key, initialDirection));
+  const sortHistorical = (
+    key: HistoricalSortKey,
+    initialDirection: "asc" | "desc" = "asc",
+  ) => setHistoricalSort((current) => nextSortState(current, key, initialDirection));
+  const sortOperators = (
+    key: OperatorSortKey,
+    initialDirection: "asc" | "desc" = "asc",
+  ) => setOperatorSort((current) => nextSortState(current, key, initialDirection));
   const availableVenueTrials =
     venuePreview.data?.trials.filter((trial) => trial.available) ?? [];
   const unavailableVenueTrials =
@@ -302,12 +385,14 @@ export function FormulaLabPage() {
                 Experiment mechanics
               </div>
               <h2 className="mt-1 text-base font-semibold">
-                Ten-thousand-variant capacity plan
+                Configurable candidate-budget plan
               </h2>
               <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
                 One immutable candidate manifest is materialized once, crossed with target
-                adapters, and evaluated in bounded local shards. Discovery may rank formulas, but
-                only a frozen selection behind a new untouched boundary may enter validation.
+                adapters, and evaluated in bounded local shards. The displayed 10,000-variant
+                manifest is a capacity example, not a required experiment size. Discovery may rank
+                formulas, but only a frozen selection behind a new untouched boundary may enter
+                validation.
               </p>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-success">
@@ -405,8 +490,10 @@ export function FormulaLabPage() {
                 </div>
                 <div className="mt-3 space-y-3 text-xs leading-relaxed text-muted-foreground">
                   <p>
-                    The local capacity benchmark evaluates 10,000 variants across 1,440 synthetic
-                    frames in 40 shards for one target. It never touches the production collectors.
+                    Candidate count is chosen per experiment within the declared safety cap. The
+                    current local benchmark happens to evaluate 10,000 variants across 1,440
+                    synthetic frames in 40 shards for one target; it never touches production
+                    collectors.
                   </p>
                   <p>
                     At a nominal 5% threshold, this {scaleStatus.data.plan.discoveryTrials.toLocaleString()}-test
@@ -457,6 +544,115 @@ export function FormulaLabPage() {
             </div>
           </>
         )}
+      </section>
+
+      <section className="overflow-hidden rounded-xl border bg-card">
+        <header className="border-b px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Governed expression vocabulary
+              </div>
+              <h2 className="mt-1 text-base font-semibold">Operator catalog</h2>
+              <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                Every operator has declared arity, lookback, unit behavior, numerical guards, and
+                compute cost. Only active-search rows are reachable by today’s generator.
+                Import-evaluator rows support pinned historical replay; candidates are proposals,
+                not silent grammar changes.
+              </p>
+            </div>
+            <span className="rounded-md border px-2 py-1 font-mono text-[10px] text-muted-foreground">
+              {data.operatorCatalog.version}
+            </span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {([
+              ["all", "All", data.operatorCatalog.counts.total],
+              ["active-search", "Active", data.operatorCatalog.counts.activeSearch],
+              ["import-evaluator", "Import", data.operatorCatalog.counts.importEvaluator],
+              ["candidate", "Candidates", data.operatorCatalog.counts.candidate],
+              ["excluded", "Excluded", data.operatorCatalog.counts.excluded],
+            ] as const).map(([state, label, count]) => (
+              <button
+                key={state}
+                type="button"
+                onClick={() => setOperatorState(state)}
+                aria-pressed={operatorState === state}
+                className="rounded-md border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+              >
+                {label} <span className="font-mono">{count}</span>
+              </button>
+            ))}
+          </div>
+        </header>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1120px] text-sm">
+            <thead className="border-b bg-muted/20 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <tr>
+                <PolymarketSortableHeader column="label" active={operatorSort.key} direction={operatorSort.direction} onSort={sortOperators}>Operator</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="category" active={operatorSort.key} direction={operatorSort.direction} onSort={sortOperators}>Category</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="state" active={operatorSort.key} direction={operatorSort.direction} onSort={sortOperators}>Admission</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="arity" active={operatorSort.key} direction={operatorSort.direction} onSort={sortOperators} align="right">Arity</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="lookback" active={operatorSort.key} direction={operatorSort.direction} onSort={sortOperators}>Lookback</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="cost" active={operatorSort.key} direction={operatorSort.direction} onSort={sortOperators}>Compute</PolymarketSortableHeader>
+                <th className="px-4 py-3 text-left">Contract</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {operators.map((operator) => (
+                <tr key={operator.id} className="align-top hover:bg-muted/10">
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{operator.label}</div>
+                    <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {operator.id}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs capitalize text-muted-foreground">
+                    {operator.category.replace("-", " ")}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      operator.state === "active-search"
+                        ? "border-success/30 bg-success/10 text-success"
+                        : operator.state === "import-evaluator"
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : operator.state === "excluded"
+                            ? "border-destructive/30 bg-destructive/10 text-destructive"
+                            : "border-warning/30 bg-warning/10 text-warning"
+                    }`}>
+                      {operator.state.replace("-", " ")}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">{operator.arity}</td>
+                  <td className="px-4 py-3 text-xs capitalize text-muted-foreground">
+                    {operator.lookback}
+                    {operator.parameters.length > 0 ? (
+                      <div className="mt-1 font-mono text-[10px] normal-case">
+                        {operator.parameters.map((parameter) =>
+                          `${parameter.name} ${parameter.minimum}–${parameter.maximum}`,
+                        ).join(" · ")}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {operator.computeCost.replace("-", " ")}
+                  </td>
+                  <td className="max-w-md px-4 py-3">
+                    <div className="text-xs">{operator.description}</div>
+                    <div className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                      {operator.guard} · {operator.unitRule}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          Candidate count is an experiment budget, not an operator property. Small smoke tests and
+          large distributed searches use the same immutable grammar/version contract and retain
+          every attempted formula in the denominator.
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-xl border bg-card">
@@ -782,8 +978,8 @@ export function FormulaLabPage() {
               <p className="text-muted-foreground mt-1 max-w-4xl text-xs leading-relaxed">
                 Supplied from the August–September 2024 Formula Lab conversations. The parser
                 preserves the exact expression so its structure can inform import tooling and
-                visualization. It is not evaluated, ranked, registered, or included in the current
-                bounded search grammar.
+                visualization. The separate replay below evaluates pinned Qlib semantics, but the
+                expression is not admitted to the bounded search grammar or strategy registry.
               </p>
             </div>
             <span className="border-warning/30 bg-warning/10 text-warning rounded-md border px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide">
@@ -801,7 +997,7 @@ export function FormulaLabPage() {
             {
               label: "Tree depth",
               value: data.historicalFormulaResearch.depth.toString(),
-              detail: "Root predicate through deepest leaf",
+              detail: "Root numeric operator through deepest leaf",
             },
             {
               label: "Function types",
@@ -860,6 +1056,168 @@ export function FormulaLabPage() {
               ))}
             </ul>
           </article>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border bg-card">
+        <header className="border-b px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Imported tape replay · retrospective discovery
+              </div>
+              <h2 className="mt-1 text-base font-semibold">Albert formula × BTC 5m × fixed 10m short</h2>
+              <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                The exact imported expression is evaluated with Microsoft Qlib v0.9.5 semantics
+                over the immutable TradingView Hyperliquid BTC tape. Thresholds use prior-fold
+                output moments only; entry is the next contiguous bar open and exit is the bar open
+                exactly ten minutes later. This is historical OHLCV—not an executable fill study.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-destructive">
+              <Lock className="h-3.5 w-3.5" />
+              no net-positive fold
+            </span>
+          </div>
+        </header>
+
+        <div className="grid border-b sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: "Source bars",
+              value: data.historicalReplay.dataset.rows.toLocaleString(),
+              detail: `${data.historicalReplay.dataset.eligiblePoints.toLocaleString()} eligible decisions · ${data.historicalReplay.dataset.segments} gap-safe segments`,
+            },
+            {
+              label: "Formula output",
+              value: data.historicalReplay.evaluator.finiteValues.toLocaleString(),
+              detail: `${data.historicalReplay.evaluator.nanValues} NaN warm-up values · Qlib v0.9.5`,
+            },
+            {
+              label: "Declared trials",
+              value: data.historicalReplay.trials.length.toString(),
+              detail: `Control + two tails × three z gates · ${data.historicalReplay.target.folds} chronological folds`,
+            },
+            {
+              label: "Cost stress",
+              value: `${data.historicalReplay.target.roundTripCostBps} bps`,
+              detail: "Subtracted from every fixed-horizon short; spread and slippage are not reconstructed.",
+            },
+          ].map((metric) => (
+            <article
+              key={metric.label}
+              className="border-b p-4 last:border-b-0 sm:border-r sm:last:border-r-0 xl:border-b-0"
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {metric.label}
+              </div>
+              <div className="mt-2 font-mono text-xl font-semibold">{metric.value}</div>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{metric.detail}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="border-b bg-destructive/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">Observed result:</span>{" "}
+          {data.historicalReplay.observedResult}
+        </div>
+
+        <details className="border-b px-4 py-3">
+          <summary className="cursor-pointer text-xs font-medium">
+            Formula distribution, information coefficient, and next sensitivity
+          </summary>
+          <div className="mt-3 grid gap-4 text-xs lg:grid-cols-3">
+            <div>
+              <div className="font-medium">Output distribution</div>
+              <div className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                min {data.historicalReplay.evaluator.minimum.toExponential(3)} · mean{" "}
+                {data.historicalReplay.evaluator.mean.toExponential(3)} · max{" "}
+                {data.historicalReplay.evaluator.maximum.toExponential(3)}
+              </div>
+            </div>
+            <div>
+              <div className="font-medium">Held-out rank IC</div>
+              <div className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                {data.historicalReplay.informationCoefficientByFold
+                  .map((fold) => `F${fold.fold} ${fold.spearman >= 0 ? "+" : ""}${fold.spearman.toFixed(3)}`)
+                  .join(" · ")}
+              </div>
+            </div>
+            <div>
+              <div className="font-medium">Next declared family</div>
+              <p className="mt-1 leading-relaxed text-muted-foreground">
+                {data.historicalReplay.nextResearchStep}
+              </p>
+            </div>
+          </div>
+        </details>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1160px] text-sm">
+            <thead className="border-b bg-muted/20 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <tr>
+                <PolymarketSortableHeader column="trial" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical}>Trial</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="status" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical}>Sample floor</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="trades" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical} align="right">Trades</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="gross" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical} align="right">Gross mean</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="net" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical} align="right">Net mean</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="hitRate" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical} align="right">Net hit</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="positiveFolds" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical} align="right">Positive folds</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="worstFold" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical} align="right">Worst fold</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="finalEquity" active={historicalSort.key} direction={historicalSort.direction} onSort={sortHistorical} align="right">Final equity</PolymarketSortableHeader>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {historicalTrials.map((trial) => (
+                <tr
+                  key={trial.id}
+                  className={trial.available ? "hover:bg-muted/10" : "text-muted-foreground"}
+                >
+                  <td className="px-4 py-3">
+                    <div className="text-xs font-medium">{trial.id}</div>
+                    <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {trial.tail === "all"
+                        ? "every eligible decision"
+                        : `${trial.tail} tail · z ${trial.thresholdZ}`}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      trial.available
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-warning/30 bg-warning/10 text-warning"
+                    }`}>
+                      {trial.available ? "met" : "under"}
+                    </span>
+                    {!trial.available ? (
+                      <div className="mt-1 max-w-48 text-[10px] leading-tight text-muted-foreground">
+                        {trial.unavailableReason}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">{trial.trades.toLocaleString()}</td>
+                  <td className={`px-4 py-3 text-right font-mono ${
+                    trial.meanGrossBps == null ? "" : trial.meanGrossBps > 0 ? "text-success" : "text-destructive"
+                  }`}>{bps(trial.meanGrossBps)}</td>
+                  <td className={`px-4 py-3 text-right font-mono ${
+                    trial.meanNetBps == null ? "" : trial.meanNetBps > 0 ? "text-success" : "text-destructive"
+                  }`}>{bps(trial.meanNetBps)}</td>
+                  <td className="px-4 py-3 text-right font-mono">{pct(trial.hitRate)}</td>
+                  <td className="px-4 py-3 text-right font-mono">{trial.positiveFolds}/{data.historicalReplay.target.folds}</td>
+                  <td className="px-4 py-3 text-right font-mono">{bps(trial.worstFoldMeanNetBps)}</td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    ${trial.finalEquityUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          Capital is a descriptive fixed-notional path ({data.historicalReplay.target.capital}).
+          Under-sampled rows remain visible but do not satisfy the frozen fold floor. Receipt{" "}
+          <span className="font-mono">{data.historicalReplay.receiptHash.slice(0, 22)}…</span>.
+          No row is selected or admitted.
         </div>
       </section>
 

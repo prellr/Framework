@@ -36,16 +36,19 @@ const OPERATOR_GLOSSARY: Record<
   }
 > = {
   Less: {
-    label: "Less than",
-    detail: "Boolean entry predicate: left expression < right expression.",
+    label: "Element-wise minimum",
+    detail:
+      "Qlib v0.9.5 numeric operator: returns the smaller value at each observation. Boolean less-than is the separate Lt operator.",
   },
   Max: {
-    label: "Maximum",
-    detail: "Returns the larger input; here it places a floor under the lagged WMA branch.",
+    label: "Rolling maximum",
+    detail:
+      "Qlib v0.9.5 rolling operator: returns the maximum of its first input over the declared lookback.",
   },
   WMA: {
-    label: "Weighted moving average",
-    detail: "Weighted average of a prior-bar series over the declared lookback.",
+    label: "Legacy weighted moving average",
+    detail:
+      "Qlib v0.9.5 rolling implementation with linearly increasing weights and its historical np.nanmean scaling.",
   },
   Ref: {
     label: "Lagged reference",
@@ -221,6 +224,13 @@ export const LEGACY_ALBERT_FORMULA_RESEARCH = {
   source: LEGACY_ALBERT_FORMULA_SOURCE,
   expression,
   canonicalSource: renderLegacyFormula(expression),
+  semantics: {
+    engine: "Microsoft Qlib",
+    version: "v0.9.5",
+    sourceUrl: "https://github.com/microsoft/qlib/blob/v0.9.5/qlib/data/ops.py",
+    importedFormulaPeriodCompatibility:
+      "v0.9.5 predates the August 2024 formula and matches the operator names in the supplied expression",
+  },
   complexity: legacyFormulaComplexity(expression),
   depth: legacyFormulaDepth(expression),
   operators: operatorCounts,
@@ -232,8 +242,8 @@ export const LEGACY_ALBERT_FORMULA_RESEARCH = {
     systemName: "Albert",
   },
   interpretation: [
-    "The root Less predicate compares a lagged-low WMA branch with a rolling-covariance branch scaled by the prior open.",
-    "The left branch takes the maximum of a 40-bar WMA of lows lagged two completed bars and the constant 20.",
+    "The root Less call emits the numeric element-wise minimum of a lagged-low WMA branch and a rolling-covariance branch scaled by the prior open; it is not an entry predicate.",
+    "The left branch takes a 20-observation rolling maximum of a 40-observation legacy Qlib WMA of lows lagged two completed bars.",
     "The covariance uses a 50-bar lookback over two highly composite OHLCV-derived series.",
     "The right branch multiplies that covariance by the open from one completed bar ago.",
   ],
@@ -249,6 +259,8 @@ export const LEGACY_ALBERT_FORMULA_RESEARCH = {
     "Historical screenshots and reported win rates are discovery-era observations, not reproducible validation evidence.",
     "The expression mixes price and volume units and may be scale-dependent across assets or venue conventions.",
     "The unprotected Div operator and large composite products require explicit finite-value and overflow guards before evaluation.",
+    "Qlib v0.9.5 WMA uses np.nanmean after normalizing its linear weights, so it is not interchangeable with a conventional weighted sum; any corrected WMA is a separate sensitivity trial.",
+    "The historical conversation does not supply the entry inequality, score threshold, position side, or exact exit clock needed to turn this numeric series into a complete strategy.",
     "Importing this expression does not admit its functions, constants, or result into the current Formula Lab search grammar.",
   ],
   invariants: {
