@@ -36,6 +36,27 @@ test("Formula Lab status exposes the complete deterministic trial universe", () 
   assert.ok(status.historicalReplay.trials.every((trial) => trial.positiveFolds === 0));
   assert.equal(status.historicalReplay.invariants.registersStrategy, false);
   assert.equal(status.historicalReplay.invariants.enablesExecution, false);
+  assert.deepEqual(
+    status.historicalHorizonSensitivity.target.requestedHoldMinutes,
+    [30, 60, 240],
+  );
+  assert.equal(status.historicalHorizonSensitivity.horizons.length, 3);
+  assert.ok(status.historicalHorizonSensitivity.horizons.every(
+    (horizon) => horizon.trials.length === 7,
+  ));
+  assert.ok(status.historicalHorizonSensitivity.horizons.every(
+    (horizon) => horizon.trials.every(
+      (trial) => trial.meanNetBps == null || trial.meanNetBps < 0,
+    ),
+  ));
+  assert.equal(
+    status.historicalHorizonSensitivity.invariants.registersStrategy,
+    false,
+  );
+  assert.equal(
+    status.historicalHorizonSensitivity.invariants.enablesExecution,
+    false,
+  );
 });
 
 test("planted proof passes mechanics while remaining explicitly non-market evidence", () => {

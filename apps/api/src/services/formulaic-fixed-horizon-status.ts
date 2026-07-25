@@ -16,6 +16,9 @@ import {
 } from "./formulaic-fixed-horizon-poc.ts";
 import { LEGACY_ALBERT_FORMULA_RESEARCH } from "./legacy-formula-research.ts";
 import { HISTORICAL_ALBERT_REPLAY_RECEIPT } from "./historical-albert-replay-receipt.ts";
+import {
+  HISTORICAL_ALBERT_HORIZON_SENSITIVITY_RECEIPT,
+} from "./historical-albert-horizon-sensitivity-receipt.ts";
 import { formulaOperatorCatalogStatus } from "./formula-operator-catalog.ts";
 
 const SYNTHETIC_CONFIG = {
@@ -95,6 +98,8 @@ export function formulaLabStatus() {
     })),
     historicalFormulaResearch: LEGACY_ALBERT_FORMULA_RESEARCH,
     historicalReplay: HISTORICAL_ALBERT_REPLAY_RECEIPT,
+    historicalHorizonSensitivity:
+      HISTORICAL_ALBERT_HORIZON_SENSITIVITY_RECEIPT,
     proof: {
       mode: "planted-signal synthetic mechanics test",
       isMarketEvidence: false,

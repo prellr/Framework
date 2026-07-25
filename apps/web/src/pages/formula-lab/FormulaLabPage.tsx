@@ -35,6 +35,9 @@ type Candidate = FormulaLab["candidates"][number];
 type Fold = FormulaLab["proof"]["folds"][number];
 type VenueTrial = VenuePreview["trials"][number];
 type HistoricalTrial = FormulaLab["historicalReplay"]["trials"][number];
+type HistoricalHorizonTrial =
+  FormulaLab["historicalHorizonSensitivity"]["horizons"][number]["trials"][number]
+  & { holdMinutes: number };
 type FormulaOperator = FormulaLab["operatorCatalog"]["operators"][number];
 type CandidateSortKey = "id" | "formula" | "threshold" | "complexity";
 type OperatorSortKey =
@@ -64,6 +67,17 @@ type VenueSortKey =
   | "netMean"
   | "hitRate";
 type HistoricalSortKey =
+  | "trial"
+  | "status"
+  | "trades"
+  | "gross"
+  | "net"
+  | "hitRate"
+  | "positiveFolds"
+  | "worstFold"
+  | "finalEquity";
+type HistoricalHorizonSortKey =
+  | "horizon"
   | "trial"
   | "status"
   | "trades"
@@ -128,6 +142,27 @@ function historicalValue(row: HistoricalTrial, key: HistoricalSortKey): SortValu
     case "finalEquity": return row.finalEquityUsd;
   }
 }
+
+function historicalHorizonValue(
+  row: HistoricalHorizonTrial,
+  key: HistoricalHorizonSortKey,
+): SortValue {
+  switch (key) {
+    case "horizon": return row.holdMinutes;
+    case "trial": return row.id;
+    case "status": return row.available ? 1 : 0;
+    case "trades": return row.trades;
+    case "gross": return row.meanGrossBps;
+    case "net": return row.meanNetBps;
+    case "hitRate": return row.hitRate;
+    case "positiveFolds": return row.positiveFolds;
+    case "worstFold": return row.worstFoldMeanNetBps;
+    case "finalEquity": return row.finalEquityUsd;
+  }
+}
+
+const horizonLabel = (holdMinutes: number) =>
+  holdMinutes < 60 ? `${holdMinutes}m` : `${holdMinutes / 60}h`;
 
 function operatorValue(row: FormulaOperator, key: OperatorSortKey): SortValue {
   switch (key) {
@@ -199,6 +234,12 @@ export function FormulaLabPage() {
     key: "net",
     direction: "desc",
   });
+  const [historicalHorizonSort, setHistoricalHorizonSort] = useState<
+    SortState<HistoricalHorizonSortKey>
+  >({
+    key: "horizon",
+    direction: "asc",
+  });
   const [operatorSort, setOperatorSort] = useState<SortState<OperatorSortKey>>({
     key: "state",
     direction: "asc",
@@ -242,6 +283,21 @@ export function FormulaLabPage() {
         historicalSort.direction,
       ),
     [historicalSort, lab.data],
+  );
+  const historicalHorizonTrials = useMemo(
+    () =>
+      stableSortRows(
+        (lab.data?.historicalHorizonSensitivity.horizons ?? []).flatMap(
+          (horizon) =>
+            horizon.trials.map((trial) => ({
+              ...trial,
+              holdMinutes: horizon.holdMinutes,
+            })),
+        ),
+        (row) => historicalHorizonValue(row, historicalHorizonSort.key),
+        historicalHorizonSort.direction,
+      ),
+    [historicalHorizonSort, lab.data],
   );
   const operators = useMemo(
     () =>
@@ -294,6 +350,12 @@ export function FormulaLabPage() {
     key: HistoricalSortKey,
     initialDirection: "asc" | "desc" = "asc",
   ) => setHistoricalSort((current) => nextSortState(current, key, initialDirection));
+  const sortHistoricalHorizon = (
+    key: HistoricalHorizonSortKey,
+    initialDirection: "asc" | "desc" = "asc",
+  ) => setHistoricalHorizonSort(
+    (current) => nextSortState(current, key, initialDirection),
+  );
   const sortOperators = (
     key: OperatorSortKey,
     initialDirection: "asc" | "desc" = "asc",
@@ -1125,6 +1187,181 @@ export function FormulaLabPage() {
           Under-sampled rows remain visible but do not satisfy the frozen fold floor. Receipt{" "}
           <span className="font-mono">{data.historicalReplay.receiptHash.slice(0, 22)}…</span>.
           No row is selected or admitted.
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border bg-card">
+        <header className="border-b px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Fixed-exit sensitivity · retrospective discovery
+              </div>
+              <h2 className="mt-1 text-base font-semibold">
+                Albert formula × BTC 5m × 30m / 1h / 4h exits
+              </h2>
+              <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                These rows change only the forced exit clock. Formula, short side, next-open entry,
+                chronological folds, training-only thresholds, non-overlap rule, source tape, and
+                10 bps round-trip stress are frozen to the 10-minute baseline above. Every declared
+                row remains visible; under-sampled rows cannot pass.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-destructive">
+              <Lock className="h-3.5 w-3.5" />
+              no horizon passed
+            </span>
+          </div>
+        </header>
+
+        <div className="grid border-b sm:grid-cols-3">
+          {data.historicalHorizonSensitivity.horizons.map((horizon) => {
+            const finiteTrials = horizon.trials.filter(
+              (trial) => trial.meanGrossBps != null,
+            );
+            const bestGross = finiteTrials.reduce(
+              (best, trial) =>
+                (trial.meanGrossBps ?? Number.NEGATIVE_INFINITY)
+                  > (best.meanGrossBps ?? Number.NEGATIVE_INFINITY)
+                  ? trial
+                  : best,
+              finiteTrials[0]!,
+            );
+            return (
+              <article
+                key={horizon.holdMinutes}
+                className="border-b p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {horizonLabel(horizon.holdMinutes)} forced exit
+                </div>
+                <div className="mt-2 font-mono text-xl font-semibold">
+                  {bps(bestGross.meanGrossBps)} gross
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {bestGross.id} · {bps(bestGross.meanNetBps)} net ·{" "}
+                  {bestGross.positiveFolds}/{data.historicalHorizonSensitivity.target.folds} positive
+                  folds
+                </p>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="border-b bg-destructive/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">Observed result:</span>{" "}
+          {data.historicalHorizonSensitivity.observedResult}
+        </div>
+
+        <details className="border-b px-4 py-3">
+          <summary className="cursor-pointer text-xs font-medium">
+            Interpretation and held-out rank association
+          </summary>
+          <div className="mt-3 grid gap-4 text-xs lg:grid-cols-[2fr_3fr]">
+            <p className="leading-relaxed text-muted-foreground">
+              {data.historicalHorizonSensitivity.interpretation}
+            </p>
+            <div className="font-mono text-[11px] leading-relaxed text-muted-foreground">
+              {data.historicalHorizonSensitivity.horizons.map((horizon) => (
+                <div key={horizon.holdMinutes}>
+                  {horizonLabel(horizon.holdMinutes)} Spearman:{" "}
+                  {horizon.spearmanInformationCoefficientByFold
+                    .map((value, index) => `F${index + 1} +${value.toFixed(3)}`)
+                    .join(" · ")}
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1260px] text-sm">
+            <thead className="border-b bg-muted/20 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <tr>
+                <PolymarketSortableHeader column="horizon" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon}>Exit</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="trial" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon}>Trial</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="status" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon}>Sample floor</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="trades" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon} align="right">Trades</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="gross" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon} align="right">Gross mean</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="net" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon} align="right">Net mean</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="hitRate" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon} align="right">Net hit</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="positiveFolds" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon} align="right">Positive folds</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="worstFold" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon} align="right">Worst fold</PolymarketSortableHeader>
+                <PolymarketSortableHeader column="finalEquity" active={historicalHorizonSort.key} direction={historicalHorizonSort.direction} onSort={sortHistoricalHorizon} align="right">Final equity</PolymarketSortableHeader>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {historicalHorizonTrials.map((trial) => (
+                <tr
+                  key={`${trial.holdMinutes}:${trial.id}`}
+                  className={trial.available ? "hover:bg-muted/10" : "text-muted-foreground"}
+                >
+                  <td className="px-4 py-3 font-mono font-medium">
+                    {horizonLabel(trial.holdMinutes)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-xs font-medium">{trial.id}</div>
+                    <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {trial.tail === "all"
+                        ? "every eligible decision"
+                        : `${trial.tail} tail · z ${trial.thresholdZ}`}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      trial.available
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-warning/30 bg-warning/10 text-warning"
+                    }`}>
+                      {trial.available ? "met" : "under"}
+                    </span>
+                    {!trial.available ? (
+                      <div className="mt-1 max-w-48 text-[10px] leading-tight text-muted-foreground">
+                        {trial.unavailableReason}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    {trial.trades.toLocaleString()}
+                  </td>
+                  <td className={`px-4 py-3 text-right font-mono ${
+                    trial.meanGrossBps == null
+                      ? ""
+                      : trial.meanGrossBps > 0 ? "text-success" : "text-destructive"
+                  }`}>
+                    {bps(trial.meanGrossBps)}
+                  </td>
+                  <td className={`px-4 py-3 text-right font-mono ${
+                    trial.meanNetBps == null
+                      ? ""
+                      : trial.meanNetBps > 0 ? "text-success" : "text-destructive"
+                  }`}>
+                    {bps(trial.meanNetBps)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">{pct(trial.hitRate)}</td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    {trial.positiveFolds}/{data.historicalHorizonSensitivity.target.folds}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    {bps(trial.worstFoldMeanNetBps)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    ${trial.finalEquityUsd.toLocaleString("en-US", {
+                      maximumFractionDigits: 0,
+                    })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+          The 10-minute baseline remains in its original immutable receipt above. This sensitivity
+          receipt is{" "}
+          <span className="font-mono">
+            {data.historicalHorizonSensitivity.receiptHash.slice(0, 22)}…
+          </span>.
+          Sorting is descriptive only; no row is selected, exported, registered, or activated.
         </div>
       </section>
 

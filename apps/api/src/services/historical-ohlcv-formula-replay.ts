@@ -489,10 +489,11 @@ function observationsFor(
   return observations;
 }
 
-function capitalResult(observations: TrialObservation[]) {
+function capitalResult(observations: TrialObservation[], holdMs: number) {
+  const holdMinutes = holdMs / 60_000;
   const trades: FormulaPaperTradeOutcome[] = observations.map((observation) => ({
     id: observation.id,
-    targetKey: "BTC-USDC-PERP:historical-5m-fixed-10m-short",
+    targetKey: `BTC-USDC-PERP:historical-5m-fixed-${holdMinutes}m-short`,
     entryAtMs: observation.entryAtMs,
     exitAtMs: observation.exitAtMs,
     netReturnOnNotional: observation.netSimpleReturn,
@@ -707,7 +708,7 @@ export function runHistoricalOhlcvFormulaReplay(input: {
           ? Math.min(...finiteFoldMeans)
           : null,
       },
-      capital: capitalResult(aggregateObservations),
+      capital: capitalResult(aggregateObservations, input.config.holdMs),
     };
   });
 

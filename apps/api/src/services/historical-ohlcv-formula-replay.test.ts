@@ -146,3 +146,39 @@ test("future prices cannot alter the first fold training threshold", () => {
     first.trials[1]!.folds[0]!.outputStd,
   );
 });
+
+test("30m, 60m, and 240m exits stay exact, deterministic, and gap-safe", () => {
+  const rows = syntheticRows(720, 360);
+  const expression = parseLegacyFormula("Sub($close,$open)");
+  for (const holdMinutes of [30, 60, 240]) {
+    const horizonConfig = {
+      ...config,
+      holdMs: holdMinutes * 60_000,
+    };
+    const first = runHistoricalOhlcvFormulaReplay({
+      datasetId: "synthetic",
+      datasetVersion: "v1",
+      datasetContentHash: "sha256:synthetic",
+      rows,
+      expression,
+      config: horizonConfig,
+    });
+    const second = runHistoricalOhlcvFormulaReplay({
+      datasetId: "synthetic",
+      datasetVersion: "v1",
+      datasetContentHash: "sha256:synthetic",
+      rows,
+      expression,
+      config: horizonConfig,
+    });
+    assert.equal(first.config.holdMs, holdMinutes * 60_000);
+    assert.ok(first.rejectedPoints.crossedGapOrClockMismatch > 0);
+    assert.equal(
+      historicalFormulaReplayReceiptHash(first),
+      historicalFormulaReplayReceiptHash(second),
+    );
+    assert.ok(first.trials.every((trial) =>
+      trial.folds.every((fold) =>
+        fold.trainLastExitAtMs != null && fold.trainLastExitAtMs <= fold.testStartAtMs)));
+  }
+});
