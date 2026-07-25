@@ -30,6 +30,8 @@
     "audit:smooth-path-quality-record": "tsx --env-file=../../.env src/scripts/record-smooth-path-quality-tape.ts",
     "audit:smooth-path-quality-preregister": "tsx --env-file=../../.env src/scripts/record-smooth-path-quality-audit.ts",
     "audit:smooth-path-quality-record-launch": "tsx --env-file=../../.env src/scripts/record-smooth-path-quality-launch-success.ts",
+    "audit:smooth-path-feature-cut-freeze-preregister": "tsx --env-file=../../.env src/scripts/record-smooth-path-feature-cut-freeze-plan-v1.ts",
+    "audit:smooth-path-feature-cuts-freeze": "tsx --env-file=../../.env src/scripts/freeze-smooth-path-feature-cuts-v1.ts",
     "audit:paper-timeframe-gate-preregister": "tsx --env-file=../../.env src/scripts/record-paper-timeframe-gate.ts",
     "audit:paper-timeframe-gate-record-launch": "tsx --env-file=../../.env src/scripts/record-paper-timeframe-gate-launch.ts",
     "audit:paper-familywise-gate-record-launch": "tsx --env-file=../../.env src/scripts/record-paper-familywise-gate-launch.ts",
