@@ -8,6 +8,7 @@ import {
   PAPER_FAMILYWISE_HYPOTHESES,
   PAPER_FAMILYWISE_OPPOSITE_KEYS,
 } from "./paper-familywise-gate.ts";
+import { PAPER_BOTS, paperBotBucketUniverse } from "./paper-floor.ts";
 import type { PaperGateBotResult } from "./paper-floor-gate.ts";
 
 const MACRO_KEYS = new Set([
@@ -55,6 +56,31 @@ test("familywise v1 freezes the complete pre-boundary strategy × timeframe fami
   assert.equal(new Set(PAPER_FAMILYWISE_HYPOTHESES).size, 57);
   assert.ok(PAPER_FAMILYWISE_HYPOTHESES.includes("pricerMC5mCobraNight:5"));
   assert.deepEqual(PAPER_FAMILYWISE_OPPOSITE_KEYS, [...MACRO_KEYS]);
+});
+
+test("the executable paper registry exactly reproduces the frozen 57-unit roster", () => {
+  const registryRoster = PAPER_BOTS
+    .filter((bot) => bot.key !== "drift")
+    .flatMap((bot) =>
+      [...new Set(
+        paperBotBucketUniverse(bot)
+          .map((bucket) => bucket.horizonMin)
+          .filter((horizonMin): horizonMin is 5 | 15 =>
+            horizonMin === 5 || horizonMin === 15
+          ),
+      )].map((horizonMin) => `${bot.key}:${horizonMin}`)
+    );
+  assert.deepEqual(registryRoster, [...PAPER_FAMILYWISE_HYPOTHESES]);
+
+  const control = PAPER_BOTS.find((bot) => bot.key === "drift");
+  assert.ok(control);
+  const controlBuckets = paperBotBucketUniverse(control);
+  assert.equal(controlBuckets.length, 12);
+  assert.deepEqual(
+    [...new Set(controlBuckets.map((bucket) => bucket.horizonMin))]
+      .sort((left, right) => left - right),
+    [5, 15],
+  );
 });
 
 test("Holm adjustment is monotone and controls against the full frozen family", () => {
