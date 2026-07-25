@@ -346,7 +346,7 @@ export interface PolygonReceipt {
 }
 
 export type TradeFlowReconciliation = {
-  chainStatus: "pending" | "verified" | "mismatch" | "reverted";
+  chainStatus: "pending" | "verified" | "mismatch" | "reverted" | "ambiguous_hash";
   chainBlockNumber: number | null;
   chainConfirmations: number | null;
   chainExchange: string | null;
@@ -636,6 +636,21 @@ const emptyReconciliation = (
   verifiedAt: null,
   verificationError: error,
 });
+
+/**
+ * Convert an irreducibly ambiguous official replacement lookup into a terminal failure.
+ *
+ * Missing and unavailable lookups remain retriable. An ambiguous lookup is different: multiple
+ * distinct official hashes satisfy every frozen execution fact, so a later retry cannot choose one
+ * without adding a new, post-boundary rule. The row therefore remains unverified and fail-closed.
+ */
+export function terminalTradeFlowReplacementReconciliation(
+  status: TradeFlowReplacementSelection["status"],
+): TradeFlowReconciliation | null {
+  return status === "ambiguous"
+    ? emptyReconciliation("ambiguous_hash", "multiple_replacement_hashes")
+    : null;
+}
 
 /** Reconcile one reported trade with a finalized successful Polygon receipt. */
 export function reconcileTradeFlowReceipt(
@@ -1080,6 +1095,7 @@ async function verifyPending() {
   let batchHashes = 0;
   let batchReplacementCandidates = 0;
   let batchReplacementVerified = 0;
+  let batchReplacementAmbiguous = 0;
   try {
     const firstAttemptBefore = new Date(
       startedAt - AUTHORITATIVE_TRADE_FLOW_TAPE.verifyInitialDelayMs,
@@ -1170,6 +1186,7 @@ async function verifyPending() {
       }
     }));
     const replacementHashByRow = new Map<number, string>();
+    const terminalReplacementByRow = new Map<number, TradeFlowReconciliation>();
     for (const row of replacementEligible) {
       const trades = replacementTradesByCondition.get(row.conditionId);
       if (!trades || !row.transactionHash) continue;
@@ -1183,6 +1200,13 @@ async function verifyPending() {
       }, trades);
       if (selection.status === "unique" && selection.transactionHash) {
         replacementHashByRow.set(row.id, selection.transactionHash);
+      } else {
+        const terminal = terminalTradeFlowReplacementReconciliation(selection.status);
+        if (!terminal) continue;
+        // Multiple distinct official hashes satisfy every frozen execution fact. There is no
+        // source-correct way to choose one now or on a later retry, so preserve the event as a
+        // terminal provenance failure instead of spending RPC/Data API capacity forever.
+        terminalReplacementByRow.set(row.id, terminal);
       }
     }
     const replacementHashes = [...new Set(replacementHashByRow.values())];
@@ -1216,7 +1240,13 @@ async function verifyPending() {
       let chainTransactionHash = sourceReceipt ? row.transactionHash : undefined;
       let verificationMethod = sourceReceipt ? "source_hash" : undefined;
       const replacementHash = replacementHashByRow.get(row.id);
-      if (!sourceReceipt && replacementHash) {
+      const terminalReplacement = terminalReplacementByRow.get(row.id);
+      if (!sourceReceipt && terminalReplacement) {
+        // A source receipt available in this classification cycle always wins. Quarantine only
+        // applies when the immutable stream hash itself remains unavailable after durable retries.
+        reconciliation = terminalReplacement;
+        batchReplacementAmbiguous++;
+      } else if (!sourceReceipt && replacementHash) {
         const replacementReconciliation = reconcileTradeFlowReceipt(
           {
             tokenId: row.tokenId,
@@ -1265,6 +1295,7 @@ async function verifyPending() {
         `[trade-flow-tape] verifier rows=${batchRows} hashes=${batchHashes}`
         + ` replacement-candidates=${batchReplacementCandidates}`
         + ` replacement-verified=${batchReplacementVerified}`
+        + ` replacement-ambiguous=${batchReplacementAmbiguous}`
         + ` durationMs=${durationMs} loadPerCpu=${loadPerCpu.toFixed(3)}`,
       );
       lastVerifierTelemetryAt = finishedAt;

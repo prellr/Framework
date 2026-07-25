@@ -10,6 +10,7 @@ import {
   parseTradeFlowEvent,
   reconcileTradeFlowReceipt,
   selectTradeFlowReplacementHash,
+  terminalTradeFlowReplacementReconciliation,
   tradeFlowMarketMetadata,
   tradeFlowPairOfQuestion,
   tradeFlowRpcMethodAllowed,
@@ -245,6 +246,39 @@ test("replacement-hash selection requires a forward-only unique execution match"
       transactionHash: null,
     });
   }
+});
+
+test("ambiguous replacement provenance is terminal, explicit, and never verified", () => {
+  assert.deepEqual(terminalTradeFlowReplacementReconciliation("ambiguous"), {
+    chainStatus: "ambiguous_hash",
+    chainBlockNumber: null,
+    chainConfirmations: null,
+    chainExchange: null,
+    chainSide: null,
+    chainTokenId: null,
+    chainMakerAmount: null,
+    chainTakerAmount: null,
+    chainPrice: null,
+    chainShares: null,
+    verifiedAt: null,
+    verificationError: "multiple_replacement_hashes",
+  });
+  for (const status of ["source_present", "unique", "missing"] as const) {
+    assert.equal(terminalTradeFlowReplacementReconciliation(status), null);
+  }
+});
+
+test("replacement quarantine remains subordinate to an available immutable source receipt", () => {
+  const source = readFileSync(
+    new URL("./polymarket-trade-flow-tape.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /if \(!sourceReceipt && terminalReplacement\)/,
+  );
+  assert.match(source, /verificationMethod = sourceReceipt \? "source_hash"/);
+  assert.match(source, /replacement-ambiguous=\$\{batchReplacementAmbiguous\}/);
 });
 
 test("market stream subscribes to standard trade events without unused custom traffic", () => {

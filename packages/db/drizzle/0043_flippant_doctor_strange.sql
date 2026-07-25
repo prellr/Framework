@@ -1,0 +1,2 @@
+ALTER TABLE "polymarket_trade_flow_event" DROP CONSTRAINT "pm_trade_flow_chain_status_chk";--> statement-breakpoint
+ALTER TABLE "polymarket_trade_flow_event" ADD CONSTRAINT "pm_trade_flow_chain_status_chk" CHECK ("polymarket_trade_flow_event"."chain_status" in ('pending','missing_hash','verified','mismatch','reverted','ambiguous_hash'));

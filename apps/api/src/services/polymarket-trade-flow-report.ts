@@ -180,6 +180,7 @@ type CumulativeRollupRow = {
   missing_hash_events: number;
   mismatch_events: number;
   reverted_events: number;
+  ambiguous_hash_events: number;
   hashed_events: number;
   distinct_markets: number;
   first_event_at: Date | string | null;
@@ -207,6 +208,9 @@ async function loadCumulativeTradeFlowStatus() {
           count(*) filter (where chain_status = 'missing_hash')::int as missing_hash_events,
           count(*) filter (where chain_status = 'mismatch')::int as mismatch_events,
           count(*) filter (where chain_status = 'reverted')::int as reverted_events,
+          count(*) filter (
+            where chain_status = 'ambiguous_hash'
+          )::int as ambiguous_hash_events,
           count(*) filter (where transaction_hash is not null)::int as hashed_events,
           min(event_at) as first_event_at,
           max(event_at) as last_event_at,
@@ -236,6 +240,7 @@ async function loadCumulativeTradeFlowStatus() {
         coalesce(sum(missing_hash_events), 0)::int as missing_hash_events,
         coalesce(sum(mismatch_events), 0)::int as mismatch_events,
         coalesce(sum(reverted_events), 0)::int as reverted_events,
+        coalesce(sum(ambiguous_hash_events), 0)::int as ambiguous_hash_events,
         coalesce(sum(hashed_events), 0)::int as hashed_events,
         count(*)::int as distinct_markets,
         min(first_event_at) as first_event_at,
@@ -261,6 +266,7 @@ async function loadCumulativeTradeFlowStatus() {
     missingHashEvents: Number(total.missing_hash_events),
     mismatchEvents: Number(total.mismatch_events),
     revertedEvents: Number(total.reverted_events),
+    ambiguousHashEvents: Number(total.ambiguous_hash_events),
     hashedEvents: Number(total.hashed_events),
     distinctMarkets: Number(total.distinct_markets),
     firstEventAt: total.first_event_at,
@@ -282,6 +288,26 @@ type CumulativeTradeFlowStatus = Awaited<ReturnType<typeof loadCumulativeTradeFl
 let cumulativeCache:
   | { expiresAtMs: number; value: CumulativeTradeFlowStatus }
   | null = null;
+
+export function summarizeTradeFlowTerminalVerification(input: {
+  verifiedEvents: number;
+  mismatchEvents: number;
+  revertedEvents: number;
+  ambiguousHashEvents: number;
+}) {
+  const count = (value: number) =>
+    Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  const verifiedEvents = count(input.verifiedEvents);
+  const terminalEvents =
+    verifiedEvents
+    + count(input.mismatchEvents)
+    + count(input.revertedEvents)
+    + count(input.ambiguousHashEvents);
+  return {
+    terminalEvents,
+    chainVerificationRate: terminalEvents > 0 ? verifiedEvents / terminalEvents : 0,
+  };
+}
 let cumulativeInflight: Promise<CumulativeTradeFlowStatus> | null = null;
 
 async function cumulativeTradeFlowStatus() {
@@ -394,6 +420,7 @@ export async function authoritativeTradeFlowTapeStatus() {
   const missingHashEvents = Number(summary?.missingHashEvents ?? 0);
   const mismatchEvents = Number(summary?.mismatchEvents ?? 0);
   const revertedEvents = Number(summary?.revertedEvents ?? 0);
+  const ambiguousHashEvents = Number(summary?.ambiguousHashEvents ?? 0);
   const hashedEvents = Number(summary?.hashedEvents ?? 0);
   const distinctMarkets = Number(summary?.distinctMarkets ?? 0);
   const mappingViolations = Number(summary?.mappingViolations ?? 0);
@@ -436,8 +463,15 @@ export async function authoritativeTradeFlowTapeStatus() {
     floorSpanDays: AUTHORITATIVE_TRADE_FLOW_TAPE.minSpanDays,
   });
   const hashCoverage = rawEvents > 0 ? hashedEvents / rawEvents : 0;
-  const terminalEvents = verifiedEvents + mismatchEvents + revertedEvents;
-  const chainVerificationRate = terminalEvents > 0 ? verifiedEvents / terminalEvents : 0;
+  // Ambiguous replacement provenance is terminal and explicitly counts against verification.
+  // Treating it as absent from this denominator would silently improve the frozen quality rate.
+  const { terminalEvents, chainVerificationRate } =
+    summarizeTradeFlowTerminalVerification({
+      verifiedEvents,
+      mismatchEvents,
+      revertedEvents,
+      ambiguousHashEvents,
+    });
   const pairs = AUTHORITATIVE_TRADE_FLOW_TAPE.targetPairs.map((pair) => {
     const row = byPair.get(pair);
     const pairMarkets = Number(row?.distinctMarkets ?? 0);
@@ -474,6 +508,7 @@ export async function authoritativeTradeFlowTapeStatus() {
     missingHashEvents,
     mismatchEvents,
     revertedEvents,
+    ambiguousHashEvents,
     distinctMarkets,
     firstEventAtMs,
     lastEventAtMs,

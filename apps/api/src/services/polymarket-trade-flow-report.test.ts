@@ -5,6 +5,7 @@ import {
   summarizeTradeFlowCapacity,
   summarizeTradeFlowStorage,
   summarizeTradeFlowOperationalHealth,
+  summarizeTradeFlowTerminalVerification,
   TRADE_FLOW_CUMULATIVE_CACHE_MS,
   TRADE_FLOW_OPERATIONAL_HEALTH,
 } from "./polymarket-trade-flow-report.ts";
@@ -170,4 +171,42 @@ test("trade-flow health distinguishes a caught-up verifier from unavailable sour
   assert.equal(health.verificationInitialDelaySec, 60);
   assert.equal(health.verificationRetryBaseSec, 600);
   assert.equal(health.verificationRetryMaxSec, 21_600);
+});
+
+test("ambiguous provenance remains in the frozen terminal verification denominator", () => {
+  assert.deepEqual(summarizeTradeFlowTerminalVerification({
+    verifiedEvents: 95,
+    mismatchEvents: 1,
+    revertedEvents: 1,
+    ambiguousHashEvents: 3,
+  }), {
+    terminalEvents: 100,
+    chainVerificationRate: 0.95,
+  });
+});
+
+test("terminal verification summary fails safe on malformed counts", () => {
+  assert.deepEqual(summarizeTradeFlowTerminalVerification({
+    verifiedEvents: Number.NaN,
+    mismatchEvents: -1,
+    revertedEvents: Number.POSITIVE_INFINITY,
+    ambiguousHashEvents: -5,
+  }), {
+    terminalEvents: 0,
+    chainVerificationRate: 0,
+  });
+});
+
+test("trade-flow schema permits explicit ambiguous quarantine without weakening verification", () => {
+  const source = readFileSync(
+    new URL("../../../../packages/db/src/schema/polymarket-trade-flow-events.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /'ambiguous_hash'/);
+  assert.match(source, /pm_trade_flow_chain_status_chk/);
+  const methodConstraint = source.match(
+    /"pm_trade_flow_verification_method_chk",([\s\S]*?)\n\s*\),/,
+  )?.[1] ?? "";
+  assert.match(methodConstraint, /'source_hash','data_api_replacement'/);
+  assert.doesNotMatch(methodConstraint, /ambiguous/);
 });
