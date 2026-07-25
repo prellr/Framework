@@ -1,5 +1,10 @@
 import type { Job } from "bullmq";
 import { ingestV1Signals, v1LoggerEnabled } from "../../services/signal-v1-logger.ts";
+import {
+  recordV1SignalSourceHealth,
+  recordV1SignalSourceStatus,
+  v1SignalSourceHealthFromIngest,
+} from "../../services/signal-v1-source-health.ts";
 
 /**
  * Jester V1 entry logger (tournament bot #5 feed). The deep tick audits subscription state before
@@ -8,11 +13,15 @@ import { ingestV1Signals, v1LoggerEnabled } from "../../services/signal-v1-logge
  */
 let tickCount = 0;
 export async function signalV1LogProcessor(_job: Job): Promise<void> {
-  if (!(await v1LoggerEnabled())) return;
+  if (!(await v1LoggerEnabled())) {
+    await recordV1SignalSourceStatus("disabled");
+    return;
+  }
   tickCount++;
   const deep = tickCount % 3 === 0;
   try {
     const r = await ingestV1Signals(deep);
+    await recordV1SignalSourceHealth(v1SignalSourceHealthFromIngest(r));
     // Deep reads happen every ~15 minutes. Emit one payload-free health line at that cadence even
     // when the legitimate result is empty, so zero forward activity cannot hide a dead source.
     if (deep || r.written || r.unsided) {
@@ -39,6 +48,7 @@ export async function signalV1LogProcessor(_job: Job): Promise<void> {
       );
     }
   } catch (err) {
+    await recordV1SignalSourceStatus("error").catch(() => {});
     console.error("[v1-log] failed:", err instanceof Error ? err.message : err);
   }
 }

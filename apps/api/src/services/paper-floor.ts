@@ -53,7 +53,13 @@ import {
   RTDS_FRESH_SEC,
 } from "./rtds.ts";
 import { gaugeToPup } from "./polymarket-updown.ts";
-import { latestV1Signal } from "./signal-v1-logger.ts";
+import { latestV1Signal, V1_SOURCE } from "./signal-v1-logger.ts";
+import { readV1SignalSourceHealth } from "./signal-v1-source-health.ts";
+import {
+  buildJesterV1PaperBotActivity,
+  buildSmoothPathPaperBotActivity,
+  type PaperBotActivity,
+} from "./paper-bot-activity.ts";
 import { getRecentCandles } from "./hyperliquid.ts";
 import { coinOf } from "./param-tracking.ts";
 import { PRICER, digitalPupBSM, digitalPupMC, ewmaVol, logReturns, strikeAt } from "./pricer.ts";
@@ -1879,6 +1885,9 @@ async function loadFloorState() {
     dailyLedgerResult,
     marketTapeResult,
     runtimeHeartbeat,
+    v1SourceHealth,
+    v1SignalTally,
+    smoothPathFunnelRows,
   ] = await Promise.all([
     summaryQuery(paperCondition),
     equityQuery(paperCondition),
@@ -2014,6 +2023,30 @@ async function loadFloorState() {
     dailyLedgerQuery(),
     marketTapeQuery(),
     readPaperFloorRuntimeHeartbeat(undefined, now),
+    readV1SignalSourceHealth(now),
+    db
+      .select({
+        rows: sql<number>`count(*)::int`,
+        lastSignal: sql<Date | null>`max(${signalSnapshots.capturedAt})`,
+      })
+      .from(signalSnapshots)
+      .where(eq(signalSnapshots.source, V1_SOURCE)),
+    db
+      .select({
+        botKey: polymarketSmoothPathFunnel.botKey,
+        eligibleRows: sql<number>`count(*)::int`,
+        observedRows:
+          sql<number>`count(*) filter (where ${polymarketSmoothPathFunnel.observed})::int`,
+        pathQualifiedRows:
+          sql<number>`count(*) filter (where ${polymarketSmoothPathFunnel.pathQualified})::int`,
+        bookQualifiedRows:
+          sql<number>`count(*) filter (where ${polymarketSmoothPathFunnel.bookQualified})::int`,
+        placedRows:
+          sql<number>`count(*) filter (where ${polymarketSmoothPathFunnel.placed})::int`,
+        lastCapturedAt: sql<Date | null>`max(${polymarketSmoothPathFunnel.capturedAt})`,
+      })
+      .from(polymarketSmoothPathFunnel)
+      .groupBy(polymarketSmoothPathFunnel.botKey),
   ]);
   const num = (value: number | string | null | undefined) => Number(value ?? 0);
   const timeMs = (value: Date | string) => value instanceof Date ? value.getTime() : new Date(value).getTime();
@@ -2035,6 +2068,21 @@ async function loadFloorState() {
   };
   const dailyLedgerRows = dailyLedgerResult.rows as DailyLedgerRow[];
   const marketTapeRows = marketTapeResult.rows as MarketTapeRow[];
+  const v1Tally = v1SignalTally[0];
+  const v1Activity = buildJesterV1PaperBotActivity(v1SourceHealth, {
+    rows: v1Tally?.rows ?? 0,
+    lastSignalAtMs: v1Tally?.lastSignal ? timeMs(v1Tally.lastSignal) : null,
+  }, now);
+  const activityByBot = new Map<string, PaperBotActivity>([
+    ["fadeV1", v1Activity],
+    ["followV1", v1Activity],
+  ]);
+  for (const row of smoothPathFunnelRows) {
+    activityByBot.set(row.botKey, buildSmoothPathPaperBotActivity({
+      ...row,
+      lastCapturedAtMs: row.lastCapturedAt ? timeMs(row.lastCapturedAt) : null,
+    }, now));
+  }
   const globalControlRows = historySummary.filter((row) => row.botKey === "drift");
   const globalControlLastDecision = globalControlRows.length
     ? Math.max(...globalControlRows.map((row) => timeMs(row.lastDecision)))
@@ -2085,6 +2133,7 @@ async function loadFloorState() {
         .sort((a, b) => b.n - a.n || b.openNow - a.openNow);
       return {
         key: b.key, name: b.name, color: b.color,
+        activity: activityByBot.get(b.key) ?? null,
         tradesToday: graded.reduce((sum, row) => sum + num(row.todayN), 0),
         pnlToday: graded.reduce((sum, row) => sum + num(row.todayPnl), 0),
         openNow: open.reduce((sum, row) => sum + num(row.n), 0),

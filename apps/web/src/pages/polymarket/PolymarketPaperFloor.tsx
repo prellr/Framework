@@ -25,10 +25,32 @@ const usd = (v: number | null | undefined) =>
 const ago = (s: number | null) => (s == null ? "—" : s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${(s / 3600).toFixed(1)}h ago`);
 const cents = (v: number | null | undefined) => v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}¢`;
 
+type FloorBotActivity =
+  | {
+    kind: "jester-v1-source";
+    status: "disabled" | "missing-credential" | "subscribed" | "unsubscribed" | "unknown" | "error" | "stale";
+    fresh: boolean;
+    checkedAgoSec: number | null;
+    signalRows: number;
+    lastSignalAgoSec: number | null;
+  }
+  | {
+    kind: "smooth-path-funnel";
+    status: "awaiting-observation" | "evaluating" | "path-qualified" | "book-qualified" | "placed" | "stale";
+    fresh: boolean;
+    capturedAgoSec: number | null;
+    eligibleRows: number;
+    observedRows: number;
+    pathQualifiedRows: number;
+    bookQualifiedRows: number;
+    placedRows: number;
+  };
+
 type FloorBot = {
   key: string;
   name: string;
   color: string;
+  activity: FloorBotActivity | null;
   tradesToday: number;
   pnlToday: number;
   openNow: number;
@@ -59,6 +81,70 @@ type FloorCombo = {
 };
 type CardHorizon = "all" | 5 | 15;
 type FeedSortKey = "time" | "bot" | "market" | "side" | "p" | "ask" | "edge" | "size" | "pnl" | "status";
+
+const rowCount = (value: number) => value.toLocaleString();
+
+export function paperBotActivityLine(activity: FloorBotActivity): {
+  label: "source" | "funnel";
+  value: string;
+  title: string;
+  warning: boolean;
+} {
+  if (activity.kind === "jester-v1-source") {
+    const title = [
+      "Read-only Jester V1 source health; independent of the selected paper cohort.",
+      `${rowCount(activity.signalRows)} sided entries have been captured locally.`,
+      activity.checkedAgoSec == null ? "No health receipt is available." : `Last health receipt: ${ago(activity.checkedAgoSec)}.`,
+      activity.lastSignalAgoSec == null ? "No local sided entry exists." : `Last sided entry: ${ago(activity.lastSignalAgoSec)}.`,
+    ].join(" ");
+    const value = activity.status === "unsubscribed"
+      ? "upstream unsubscribed"
+      : activity.status === "subscribed"
+        ? activity.lastSignalAgoSec == null
+          ? "subscribed · awaiting entry"
+          : `subscribed · entry ${ago(activity.lastSignalAgoSec)}`
+        : activity.status === "missing-credential"
+          ? "analysis credential missing"
+          : activity.status === "disabled"
+            ? "logger disabled"
+            : activity.status === "error"
+              ? "source check error"
+              : activity.status === "stale"
+                ? "source check stale"
+                : "subscription unknown";
+    return {
+      label: "source",
+      value,
+      title,
+      warning: activity.status !== "subscribed",
+    };
+  }
+
+  const title = [
+    "Outcome-blind prospective Smooth Path funnel across all registered 5m windows; independent of the selected paper cohort.",
+    `${rowCount(activity.eligibleRows)} eligible, ${rowCount(activity.observedRows)} observed,`,
+    `${rowCount(activity.pathQualifiedRows)} path-qualified, ${rowCount(activity.bookQualifiedRows)} book-qualified,`,
+    `${rowCount(activity.placedRows)} paper rows placed.`,
+    activity.capturedAgoSec == null ? "No capture receipt is available." : `Last capture: ${ago(activity.capturedAgoSec)}.`,
+  ].join(" ");
+  const value = activity.status === "stale"
+    ? `capture stale · ${rowCount(activity.observedRows)} observed`
+    : activity.status === "placed"
+      ? `${rowCount(activity.placedRows)} placed · ${rowCount(activity.observedRows)} observed`
+      : activity.status === "book-qualified"
+        ? `${rowCount(activity.observedRows)} observed · ${rowCount(activity.bookQualifiedRows)} book`
+        : activity.status === "path-qualified"
+          ? `${rowCount(activity.observedRows)} observed · ${rowCount(activity.pathQualifiedRows)} path · 0 book`
+          : activity.status === "evaluating"
+            ? `${rowCount(activity.observedRows)} observed · 0 path`
+            : "awaiting observations";
+  return {
+    label: "funnel",
+    value,
+    title,
+    warning: activity.status === "stale",
+  };
+}
 
 /** Success metrics the floor can rank/filter by — a data list so new lenses are one-line adds. */
 const METRICS: { key: string; label: string; value: (b: FloorBot) => number; fmt: (b: FloorBot) => string }[] = [
@@ -97,6 +183,19 @@ export function scopeFloorBotForCards(
     overlapVsFade: null,
     buckets: bot.buckets.filter((bucket) => bucket.horizonMin === horizon),
   };
+}
+
+function PaperBotActivityRow({ activity }: { activity: FloorBotActivity | null }) {
+  if (!activity) return null;
+  const line = paperBotActivityLine(activity);
+  return (
+    <div className="flex justify-between gap-3" title={line.title}>
+      <dt className="shrink-0 text-muted-foreground">{line.label}</dt>
+      <dd className={`text-right ${line.warning ? "text-warning" : "text-muted-foreground"}`}>
+        {line.value}
+      </dd>
+    </div>
+  );
 }
 
 export function PolymarketPaperFloor() {
@@ -605,9 +704,10 @@ export function PolymarketPaperFloor() {
                   <dt className="text-muted-foreground">heartbeat</dt>
                   <dd>{engineHeartbeat}</dd>
                 </div>
+                <PaperBotActivityRow activity={b.activity} />
                 <div className="flex justify-between" title="Most recent paper decision in the selected cohort. A healthy strategy may correctly abstain for a long time.">
                   <dt className="text-muted-foreground">last decision</dt>
-                  <dd>{b.lastDecisionAgoSec == null ? "abstaining · none in scope" : ago(b.lastDecisionAgoSec)}</dd>
+                  <dd>{b.lastDecisionAgoSec == null ? "none in selected scope" : ago(b.lastDecisionAgoSec)}</dd>
                 </div>
                 <div className="flex justify-between"><dt className="text-muted-foreground">trades today</dt><dd>{b.tradesToday} ({usd(b.pnlToday)})</dd></div>
                 <div className="flex justify-between"><dt className="text-muted-foreground">open now</dt><dd>{b.openNow} (${b.openUsd.toFixed(0)})</dd></div>
