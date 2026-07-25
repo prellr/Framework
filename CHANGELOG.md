@@ -4,6 +4,29 @@ All notable Alchemy changes are recorded here. Versions follow Semantic Versioni
 application and its research interfaces; research contracts retain their own immutable version
 identifiers.
 
+## [0.2.1] - 2026-07-25
+
+### Added
+
+- Frozen, outcome-blind 30-second execution markout disclosure with preregistered count, market,
+  and observation-span floors.
+- Execution & Capital liquidation audit showing contract markout, immediate $5 liquidation
+  return, mid-price movement, capture delay, and nonnegative-rate distributions by timeframe,
+  entry ask, and asset.
+
+### Changed
+
+- Markout observations are deduplicated to the earliest captured market-side quote so shared
+  strategy decisions cannot inflate the execution sample.
+- Clarified that 30-second markout is an adverse-selection and immediate-liquidation diagnostic;
+  it is not settlement P&L, an added execution charge, or a familywise-verdict input.
+
+### Safety
+
+- No signed markout result or segmented value is returned until all frozen readiness floors pass.
+- The disclosure query excludes strategy identity, signals, grades, outcomes, P&L, controls,
+  accounts, wallets, and orders.
+
 ## [0.2.0] - 2026-07-25
 
 ### Added

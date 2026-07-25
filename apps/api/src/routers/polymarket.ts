@@ -13,7 +13,7 @@ import { deribitSkewTapeStatus } from "../services/deribit-skew.ts";
 import { pricerCalibrationAudit } from "../services/pricer-calibration.ts";
 import { crossHorizonBundleAudit } from "../services/cross-horizon-bundle.ts";
 import { crossAssetLeadLagStatus } from "../services/cross-asset-lead-lag-report.ts";
-import { paperMarkoutStatus } from "../services/paper-markout-report.ts";
+import { paperMarkoutAudit } from "../services/paper-markout-report.ts";
 import { bsmWindowProfileCalibrationAudit } from "../services/bsm-window-profile-calibration.ts";
 import { microstructureAbsorptionAudit } from "../services/microstructure-absorption-audit.ts";
 import { fourStreakReversalAudit } from "../services/four-streak-reversal-audit.ts";
@@ -149,8 +149,9 @@ export const polymarketRouter = t.router({
   crossHorizonBundle: protectedProcedure.query(() => crossHorizonBundleAudit()),
   // Exact-match count/span/block readiness only; BTC→alt correlations stay locked until the floor.
   crossAssetLeadLagTape: protectedProcedure.query(() => crossAssetLeadLagStatus()),
-  // Count/data-quality readiness only; markout signs and rankings remain locked behind the floor.
-  paperMarkoutTape: protectedProcedure.query(() => paperMarkoutStatus()),
+  // Count/data-quality readiness first. Once every frozen floor passes, expose only the fixed,
+  // outcome-blind 30-second liquidation audit—never strategy ranks, grades, P&L, or orders.
+  paperMarkoutTape: protectedProcedure.query(() => paperMarkoutAudit()),
   // Paired BTC5m profile-vs-parent proper scores; counts only until every frozen floor passes.
   bsmWindowProfileCalibration: protectedProcedure.query(() => bsmWindowProfileCalibrationAudit()),
   // Frozen effort-vs-response audit; cannot select outcomes until all count/span/session floors pass.
