@@ -78,6 +78,16 @@ test("split registry distinguishes a prospective zero from a collection failure"
   assert.match(strategyLabPage, /Post-boundary split collection is active/);
 });
 
+test("strategy registry column titles describe their forward-evidence denominators", () => {
+  assert.match(strategyLabPage, /Strategy and preregistered rule/);
+  assert.match(strategyLabPage, /Timeframe and eligible scope/);
+  assert.match(strategyLabPage, /Eligible control markets/);
+  assert.match(strategyLabPage, /Candidate decisions \/ paired graded bets/);
+  assert.match(strategyLabPage, /Independent 5m clusters/);
+  assert.match(strategyLabPage, /Mean edge vs control \(95% CI\)/);
+  assert.match(strategyLabPage, /Forward cohort starts/);
+});
+
 test("daily RAW evidence uses grade-time Chicago days and never claims portfolio additivity", () => {
   const dailyLedger = readFileSync(
     new URL("./paper-daily-ledger.ts", import.meta.url),

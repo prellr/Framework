@@ -1184,18 +1184,18 @@ export function PolymarketStrategyLab() {
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-sm tabular-nums">
+            <table className="w-full min-w-[1320px] text-sm tabular-nums">
               <thead>
                 <tr className="bg-muted/20 text-muted-foreground border-b text-left text-[10px] uppercase tracking-[0.12em]">
-                  <PolymarketSortableHeader column="strategy" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-4 py-2.5 font-medium">Strategy / frozen rule</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="family" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-3 py-2.5 font-medium">Family</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="timeframe" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-3 py-2.5 font-medium">TF / scope</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="state" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-3 py-2.5 font-medium">Gate state</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="markets" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium">Markets</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="decisions" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium">Captured / graded</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="clusters" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium">Clusters</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="residual" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium">Residual</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="registered" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-4 py-2.5 font-medium">Registered</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="strategy" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-4 py-2.5 font-medium" title="The paper strategy and its exact preregistered decision rule.">Strategy and preregistered rule</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="family" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-3 py-2.5 font-medium" title="The research mechanism family and source or origin of the rule.">Research family</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="timeframe" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-3 py-2.5 font-medium" title="The independently evaluated 5-minute or 15-minute cohort and its eligible market scope.">Timeframe and eligible scope</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="state" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} initialDirection="asc" className="px-3 py-2.5 font-medium" title="Current state under the frozen forward-validation requirements.">Forward-gate status</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="markets" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium" title="Unique control markets observed after this cohort's boundary within the strategy's eligible universe.">Eligible control markets</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="decisions" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium" title="Candidate paper decisions captured after the boundary, followed by resolved bets with a valid same-tick comparator.">Candidate decisions / paired graded bets</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="clusters" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium" title="Independent five-minute decision windows represented in the paired residual sample.">Independent 5m clusters</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="residual" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-3 py-2.5 font-medium" title="Mean per-contract net edge versus the same-tick control, with the cluster-bootstrap 95% confidence interval below it.">Mean edge vs control (95% CI)</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="registered" active={registrySort.key} direction={registrySort.direction} onSort={sortRegistry} align="right" className="px-4 py-2.5 font-medium" title="The immutable start of this strategy and timeframe's prospective evidence cohort.">Forward cohort starts</PolymarketSortableHeader>
                 </tr>
               </thead>
               <tbody>

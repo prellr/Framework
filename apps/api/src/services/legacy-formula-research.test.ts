@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   LEGACY_ALBERT_FORMULA_RESEARCH,
@@ -8,6 +9,11 @@ import {
   parseLegacyFormula,
   renderLegacyFormula,
 } from "./legacy-formula-research.ts";
+
+const formulaLabPage = readFileSync(
+  new URL("../../../web/src/pages/formula-lab/FormulaLabPage.tsx", import.meta.url),
+  "utf8",
+);
 
 test("the user-supplied Albert formula round-trips without semantic transcription", () => {
   const parsed = parseLegacyFormula(LEGACY_ALBERT_FORMULA_SOURCE);
@@ -53,6 +59,11 @@ test("legacy formula metadata is deterministic and non-authorizing", () => {
     /rolling operator/i,
   );
   assert.doesNotMatch(LEGACY_ALBERT_FORMULA_RESEARCH.interpretation.join(" "), /Less predicate/);
+});
+
+test("legacy anatomy stays in research records without occupying the Formula Lab page", () => {
+  assert.doesNotMatch(formulaLabPage, /Albert legacy formula anatomy/);
+  assert.doesNotMatch(formulaLabPage, /LegacyFormulaExpressionTree/);
 });
 
 test("legacy parser rejects code-like or trailing input", () => {
