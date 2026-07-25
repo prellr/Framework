@@ -28,6 +28,7 @@ import {
   type SortValue,
 } from "@/pages/polymarket/PolymarketSortableHeader";
 import { FormulaExpressionTree } from "./FormulaExpressionTree";
+import { LegacyFormulaExpressionTree } from "./LegacyFormulaExpressionTree";
 
 type FormulaLab = RouterOutput["formulaLab"]["status"];
 type VenuePreview = RouterOutput["formulaLab"]["venuePreview"];
@@ -767,6 +768,98 @@ export function FormulaLabPage() {
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{step.text}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="border-warning/25 bg-card overflow-hidden rounded-xl border">
+        <header className="border-b px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-warning text-[10px] font-semibold uppercase tracking-[0.14em]">
+                Historical research prior · imported, not admitted
+              </div>
+              <h2 className="mt-1 text-base font-semibold">Albert legacy formula anatomy</h2>
+              <p className="text-muted-foreground mt-1 max-w-4xl text-xs leading-relaxed">
+                Supplied from the August–September 2024 Formula Lab conversations. The parser
+                preserves the exact expression so its structure can inform import tooling and
+                visualization. It is not evaluated, ranked, registered, or included in the current
+                bounded search grammar.
+              </p>
+            </div>
+            <span className="border-warning/30 bg-warning/10 text-warning rounded-md border px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide">
+              provenance only
+            </span>
+          </div>
+        </header>
+        <div className="grid border-b sm:grid-cols-4">
+          {[
+            {
+              label: "AST nodes",
+              value: data.historicalFormulaResearch.complexity.toString(),
+              detail: "Every call, feature, and constant",
+            },
+            {
+              label: "Tree depth",
+              value: data.historicalFormulaResearch.depth.toString(),
+              detail: "Root predicate through deepest leaf",
+            },
+            {
+              label: "Function types",
+              value: data.historicalFormulaResearch.operators.length.toString(),
+              detail: data.historicalFormulaResearch.operators
+                .map((operator) => operator.name)
+                .join(", "),
+            },
+            {
+              label: "Source fields",
+              value: data.historicalFormulaResearch.features.length.toString(),
+              detail: data.historicalFormulaResearch.features.join(", "),
+            },
+          ].map((metric) => (
+            <div
+              key={metric.label}
+              className="border-b px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+            >
+              <div className="text-muted-foreground text-[10px] font-semibold uppercase tracking-[0.12em]">
+                {metric.label}
+              </div>
+              <div className="mt-1 font-mono text-lg font-semibold">{metric.value}</div>
+              <div
+                className="text-muted-foreground mt-0.5 truncate text-[10px]"
+                title={metric.detail}
+              >
+                {metric.detail}
+              </div>
+            </div>
+          ))}
+        </div>
+        <LegacyFormulaExpressionTree
+          expression={data.historicalFormulaResearch.expression}
+          formula={data.historicalFormulaResearch.source}
+        />
+        <div className="grid border-t lg:grid-cols-2">
+          <article className="border-b p-4 lg:border-b-0 lg:border-r">
+            <h3 className="text-sm font-semibold">What the expression does</h3>
+            <ul className="text-muted-foreground mt-2 space-y-1.5 text-xs leading-relaxed">
+              {data.historicalFormulaResearch.interpretation.map((item) => (
+                <li key={item} className="flex gap-2">
+                  <span aria-hidden="true">—</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+          <article className="p-4">
+            <h3 className="text-sm font-semibold">Why it stays research-only</h3>
+            <ul className="text-muted-foreground mt-2 space-y-1.5 text-xs leading-relaxed">
+              {data.historicalFormulaResearch.warnings.map((item) => (
+                <li key={item} className="flex gap-2">
+                  <span aria-hidden="true">—</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
         </div>
       </section>
 

@@ -14,6 +14,7 @@ import {
   type FormulaFeature,
   type FormulaPoint,
 } from "./formulaic-fixed-horizon-poc.ts";
+import { LEGACY_ALBERT_FORMULA_RESEARCH } from "./legacy-formula-research.ts";
 
 const SYNTHETIC_CONFIG = {
   holdMs: FORMULAIC_FIXED_HORIZON_POC.target.holdSeconds * 1_000,
@@ -89,6 +90,7 @@ export function formulaLabStatus() {
       complexity: formulaComplexity(candidate.expression),
       depth: formulaDepth(candidate.expression),
     })),
+    historicalFormulaResearch: LEGACY_ALBERT_FORMULA_RESEARCH,
     proof: {
       mode: "planted-signal synthetic mechanics test",
       isMarketEvidence: false,
