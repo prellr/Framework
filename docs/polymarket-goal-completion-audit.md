@@ -1,6 +1,6 @@
 # Alchemy Polymarket research completion audit
 
-Last reviewed: 2026-07-24, before the frozen familywise boundary opens.
+Last reviewed: 2026-07-25, after the frozen familywise and shadow-connector launch receipts.
 
 ## Scope and non-negotiable boundary
 
@@ -35,7 +35,7 @@ Until that receipt exists, every result remains research or paper evidence.
 | Per-asset pages and links from all Polymarket asset labels | Complete | `/polymarket/asset/$asset` supplies outcome tape, strategy comparison, timeframe/period controls, and recent activity. `PolymarketAssetLink` is reused across paper cards, tapes, segmentation, strategy pages, and connector telemetry. |
 | Column-sortable data grids | Complete | Shared `PolymarketSortableHeader` and stable sort helpers cover Scoreboard, performance/segmentation, daily ledger, Paper Floor buckets/feed/combinations, strategy detail, Findings, Strategy Lab telemetry, and Crucible. Asset detail uses the same accessible sort semantics locally. |
 | Replace misleading “worst-case” labeling | Complete | `paper-accounting.ts` declares the copied 36% winner haircut uncalibrated and forbidden as a verdict input. UI labels it `Profit stress −36%`; RAW and same-tick control residual remain the authoritative accounting/comparison measures. |
-| Read-only, low-latency Polymarket connector groundwork | Complete for shadow research; live execution intentionally absent | `polymarket-shadow-connector.ts` and its audit build execution-plan telemetry from public books without auth, signing, submission, cancellation, or fill claims. The post-boundary 12-bucket receipt is still pending. |
+| Read-only, low-latency Polymarket connector groundwork | Complete for shadow research; live execution intentionally absent | `polymarket-shadow-connector.ts` and its audit build execution-plan telemetry from public books without auth, signing, submission, cancellation, or fill claims. The post-boundary receipt passed all 12 registered buckets and 72/72 telemetry plans. |
 | In-app Findings register | Complete | `PolymarketFindings.tsx` is the fourth Polymarket tab and includes the V1 retraction, current forward conclusions, methodology, and sortable evidence tables. |
 | Read-only Crucible results and result collections | Complete | `/crucible` groups mirrored catalog/warehouse results into sortable collections. Its router contains only a protected query; tests prohibit Jester calls, Crucible/Target tools, and mutation procedures. |
 | Formula Lab beyond Polymarket | Complete for the research mechanics | The Alchemy Formula Lab has venue-neutral source and target adapters, deterministic 10,000-candidate manifests, content-addressed datasets, sharded pull workers, fixed-horizon labels, capital/risk simulation, and a separated protocol/compute/UI architecture. |
@@ -45,7 +45,9 @@ Until that receipt exists, every result remains research or paper evidence.
 
 ## Verification already completed
 
-- API tests: 410 passing, including dedicated paper-worker runtime-heartbeat coverage.
+- API tests: 418 passing, including dedicated paper-worker runtime-heartbeat coverage, an exact
+  executable-registry-to-familywise-roster check, and read-only authority checks for Polymarket,
+  Formula Lab, and Crucible.
 - Python research worker: 6 passing; lint and format checks passing.
 - Cross-language worker result accepted by the TypeScript gateway under protocol v2.
 - Protocol, database, API, and web typechecks passing.
@@ -67,13 +69,39 @@ worker error filter. The control-decision clock advanced to the `23:25:00Z` mark
 expected, confirming that decision age follows eligible market windows rather than the one-minute
 worker cadence. The new independent runtime heartbeat removes that ambiguity after deployment.
 
-## Remaining gated evidence
+### Post-boundary launch and deployment receipt
 
-1. After `2026-07-25T00:16:00Z`, record the familywise launch receipt and verify the exact 57-member
-   roster, explicit exceptions, control opportunity floors, unique identities, and zero
-   pre-boundary rows.
-2. Record the shadow connector launch receipt and verify all 12 asset × timeframe buckets and its
-   two telemetry records without enabling auth, signing, or submission.
-3. Recheck Server2 service health, load, collector freshness, and the rendered Alchemy pages.
-4. Deploy only after those audits pass. A successful deployment still leaves every Polymarket
-   strategy paper-only and subject to its frozen prospective verdict gate.
+At `2026-07-25T00:16:11Z`, after the exact 16-minute grace period:
+
+- The familywise receipt reproduced all 57 frozen strategy × timeframe hypotheses and all four
+  opposite-side macro comparator exceptions.
+- The first forward cohort contained 36 control rows (24 distinct 5m and 12 distinct 15m markets)
+  and 340 unique candidate bot × market rows. Every frozen hypothesis had an eligible opportunity,
+  all registry mappings and clocks were valid, and the Cobra-night child had zero pre-boundary
+  rows.
+- The shadow-connector receipt covered all six assets at both 5m and 15m. All 72 expected
+  telemetry plans were valid. Authentication, signing, and submission were false.
+- Neither receipt selected chosen side, fill, outcome, grade, return, residual, rank, or P&L.
+
+Only after both receipts passed, Alchemy `0.1.0` source commit `ba57d8d` was deployed. Recovery
+point `/Users/admin/jester-releases/20260725T001640Z` contains checksummed source and database
+artifacts. Migration `0039` applied successfully and the Drizzle migration ledger contains 40
+rows. API, worker, nginx, Postgres, and Redis were healthy after rollout; host load was
+`1.50 / 1.74 / 1.72`.
+
+The outcome-blind CLOB readiness surface reported 99.0% usable 30-minute coverage, 100% paired-book
+coverage, zero transport-missing rows, and fresh market data. It correctly remained ineligible for
+distribution analysis because the accumulated span was only 0.70 of the required five days.
+
+Live browser verification confirmed the clarified Formula Lab column names and definitions, the
+published `alchemy-formula-lab-research-framework-v2` Knowledge article, the complete Strategy Lab
+asset roster, the frozen familywise gate, and the visible `no order endpoint` guard. The browser
+console had no errors.
+
+## Remaining forward evidence
+
+The launch and deployment gates are complete. The research objective is not complete: no strategy
+has yet satisfied the frozen 5-day, 1,500-market, 200-paired-bet, 100-cluster, effect-size,
+bootstrap, session-consistency, and familywise requirements. Collection therefore remains
+paper-only. No launch receipt, software version, UI result, or descriptive rank authorizes live
+execution.
