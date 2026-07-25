@@ -42,3 +42,23 @@ and every verdict boundary remain unchanged.
 - The new focused tests cover confirmed unsubscribe, stale source receipts, missing observations,
   stale funnel capture, and observed/path/book stage counts.
 
+## Server2 deployment
+
+- Source commit: `1ca0fc9` (`Expose paper bot source activity`).
+- Recovery point: `/Users/admin/jester-releases/20260725T205526Z`.
+- Recovery archive SHA-256:
+  `82e51ac26b898e223e04bf9eb963d7e354237d0c015170e53d577f03f2ee7988`.
+- Recovery database SHA-256:
+  `8df3b731fb46a793fa1d2e22d53d29b4ae2c75a3d71d452d07637e398f98c61f`.
+- Rolled images:
+  - API: `sha256:34166c6d8df8fab88316f5761c29ea374e08aa1929595c9022b40462b96c23db`
+  - Worker: `sha256:cafb09cc72dac8fce06a296b885b10d0af82cde167ca08f0367b5a243bbb25a0`
+  - Web/nginx: `sha256:0e56c67ca9449776e478fde9c98dec017fa0c75c19bc799ad96a00fc619528ba`
+- Post-roll health returned `status=ok`; API, worker, Postgres, and nginx were healthy.
+- The authenticated production Paper Floor rendered the new activity rows:
+  - Smooth Path v1: `3,319 observed · 6 path · 0 book`
+  - Smooth Path causal v2: `3,318 observed · 21 path · 0 book`
+  - Jester V1: `upstream unsubscribed` with zero locally captured sided entries
+- The worker resumed all six-symbol RTDS, Hyperliquid BBO/public-trade, Polymarket trade-flow, and
+  CLOB event-OFI streams. No schema, signal rule, paper-decision, verdict-gate, or execution-path
+  change was made.
