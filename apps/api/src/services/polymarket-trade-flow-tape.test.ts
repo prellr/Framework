@@ -277,7 +277,12 @@ test("replacement quarantine remains subordinate to an available immutable sourc
     source,
     /if \(!sourceReceipt && terminalReplacement\)/,
   );
-  assert.match(source, /verificationMethod = sourceReceipt \? "source_hash"/);
+  assert.match(source, /sourceReceipt \? row\.transactionHash : null/);
+  assert.match(source, /sourceReceipt \? "source_hash" : null/);
+  assert.match(
+    source,
+    /reconciliation = terminalReplacement;\s+chainTransactionHash = null;\s+verificationMethod = null;/,
+  );
   assert.match(source, /replacement-ambiguous=\$\{batchReplacementAmbiguous\}/);
 });
 

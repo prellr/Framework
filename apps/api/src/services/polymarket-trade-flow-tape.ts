@@ -1237,14 +1237,18 @@ async function verifyPending() {
         headBlock,
         nowMs,
       );
-      let chainTransactionHash = sourceReceipt ? row.transactionHash : undefined;
-      let verificationMethod = sourceReceipt ? "source_hash" : undefined;
+      let chainTransactionHash: string | null =
+        sourceReceipt ? row.transactionHash : null;
+      let verificationMethod: "source_hash" | "data_api_replacement" | null =
+        sourceReceipt ? "source_hash" : null;
       const replacementHash = replacementHashByRow.get(row.id);
       const terminalReplacement = terminalReplacementByRow.get(row.id);
       if (!sourceReceipt && terminalReplacement) {
         // A source receipt available in this classification cycle always wins. Quarantine only
         // applies when the immutable stream hash itself remains unavailable after durable retries.
         reconciliation = terminalReplacement;
+        chainTransactionHash = null;
+        verificationMethod = null;
         batchReplacementAmbiguous++;
       } else if (!sourceReceipt && replacementHash) {
         const replacementReconciliation = reconcileTradeFlowReceipt(
