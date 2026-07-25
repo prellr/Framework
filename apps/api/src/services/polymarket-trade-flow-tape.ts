@@ -857,9 +857,12 @@ function clearSocketTimers() {
   stableConnectionTimer = null;
 }
 
-function currentTokenIds(nowMs: number): string[] {
+function requiredSnapshotTokenIds(nowMs: number): string[] {
   return [...metadataByToken.values()]
-    .filter((row) => row.windowStartMs <= nowMs && nowMs < row.endDateMs)
+    // A handoff token is part of the operational baseline as soon as it is subscribed. If the
+    // public socket silently omits its initial book, reconnect during the one-minute lead instead
+    // of discovering the missing baseline only after the paper decision clock has opened.
+    .filter((row) => tradeFlowSubscriptionEligible(row, nowMs))
     .map((row) => row.tokenId);
 }
 
@@ -883,7 +886,7 @@ function connect() {
     watchdogTimer = setInterval(() => {
       if (ws.readyState !== WebSocket.OPEN) return;
       const now = Date.now();
-      const initialization = clobEventOfiInitializationStats(currentTokenIds(now));
+      const initialization = clobEventOfiInitializationStats(requiredSnapshotTokenIds(now));
       if (
         tradeFlowCurrentSnapshotsReady(
           initialization.expectedTokens,
@@ -938,7 +941,7 @@ function connect() {
       const observedClobEvent = observeClobEventOfi(message, receivedAtMs);
       if (observedClobEvent && !snapshotRecoveryConfirmed) {
         const initialization = clobEventOfiInitializationStats(
-          currentTokenIds(receivedAtMs),
+          requiredSnapshotTokenIds(receivedAtMs),
         );
         if (
           tradeFlowCurrentSnapshotsReady(

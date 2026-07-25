@@ -8,7 +8,7 @@ import {
 
 test("current Up/Down discovery has a tight, bounded, cached pagination contract", () => {
   assert.deepEqual(CURRENT_UPDOWN_DISCOVERY, {
-    lookaheadMin: 15,
+    lookaheadMin: 17,
     tagId: 102_127,
     pageSize: 100,
     maxPages: 3,

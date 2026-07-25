@@ -32,7 +32,9 @@ const pairOf = (market: GammaMarket): (typeof targetPairs)[number] | null => {
 };
 
 if (
-  CURRENT_UPDOWN_DISCOVERY.lookaheadMin !== 15
+  // This recorder is an immutable receipt for the 2026-07-24 tag-repair contract, not the current
+  // discovery configuration.
+  (CURRENT_UPDOWN_DISCOVERY as { lookaheadMin: number }).lookaheadMin !== 15
   || CURRENT_UPDOWN_DISCOVERY.tagId !== 102_127
   || CURRENT_UPDOWN_DISCOVERY.pageSize !== 100
   || CURRENT_UPDOWN_DISCOVERY.maxPages !== 3

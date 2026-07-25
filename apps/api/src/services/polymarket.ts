@@ -123,13 +123,15 @@ export async function fetchLiveCryptoUpDown(withinHours = 3): Promise<GammaMarke
  * The generic Gamma list is capped at 100 rows before Jester applies its crypto filter, so a
  * successful first page can still omit live target markets. The official `Up or Down` tag removes
  * unrelated same-expiry sports markets before pagination; the local title/asset predicate remains a
- * second independent scope guard. A tight 15-minute end window contains every current 5m/15m
- * contract, while bounded pagination still fails closed if the tagged universe unexpectedly grows.
- * Calls within one worker are coalesced briefly so every paper/read-only collector shares the same
+ * second independent scope guard. The 17-minute end window contains every current 5m/15m contract
+ * plus enough clock margin for the public socket's frozen one-minute handoff subscription and its
+ * 30-second refresh cadence. Paper decisions still filter strictly to markets whose windows have
+ * already opened. Bounded pagination fails closed if the tagged universe unexpectedly grows, and
+ * calls within one worker are coalesced briefly so every paper/read-only collector shares the same
  * discovery snapshot.
  */
 export const CURRENT_UPDOWN_DISCOVERY = {
-  lookaheadMin: 15,
+  lookaheadMin: 17,
   tagId: 102_127,
   pageSize: 100,
   maxPages: 3,

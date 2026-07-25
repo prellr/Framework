@@ -44,7 +44,9 @@ const firstScopeRepairAt = new Date("2026-07-24T10:08:43.000Z");
 if (
   CLOB_EVENT_OFI_TAPE.version !== "updown-clob-event-ofi-tape-v1"
   || boundary.toISOString() !== "2026-07-24T07:00:00.000Z"
-  || CURRENT_UPDOWN_DISCOVERY.lookaheadMin !== 15
+  // This recorder is an immutable receipt for the 2026-07-24 repair contract, not the current
+  // discovery configuration.
+  || (CURRENT_UPDOWN_DISCOVERY as { lookaheadMin: number }).lookaheadMin !== 15
   || CURRENT_UPDOWN_DISCOVERY.pageSize !== 100
   || Number(CURRENT_UPDOWN_DISCOVERY.maxPages) !== 5
   || CURRENT_UPDOWN_DISCOVERY.cacheMs !== 20_000

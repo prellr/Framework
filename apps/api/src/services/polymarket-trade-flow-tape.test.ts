@@ -425,6 +425,24 @@ test("socket subscription keeps live markets and one bounded handoff without nar
   );
 });
 
+test("snapshot recovery covers the subscribed handoff before its decision window opens", () => {
+  const source = readFileSync(
+    new URL("./polymarket-trade-flow-tape.ts", import.meta.url),
+    "utf8",
+  );
+  const helperStart = source.indexOf("function requiredSnapshotTokenIds");
+  const connectStart = source.indexOf("function connect()", helperStart);
+  assert.ok(helperStart >= 0 && connectStart > helperStart);
+  const helper = source.slice(helperStart, connectStart);
+  assert.match(helper, /tradeFlowSubscriptionEligible\(row, nowMs\)/);
+  assert.doesNotMatch(helper, /row\.windowStartMs <= nowMs/);
+  assert.match(source, /clobEventOfiInitializationStats\(requiredSnapshotTokenIds\(now\)\)/);
+  assert.match(
+    source,
+    /clobEventOfiInitializationStats\(\s*requiredSnapshotTokenIds\(receivedAtMs\)/,
+  );
+});
+
 test("partial discovery retains unexpired metadata and prunes only immutable expiries", () => {
   const now = boundary + 10 * 60_000;
   const retained: TradeFlowMarketMeta = {
