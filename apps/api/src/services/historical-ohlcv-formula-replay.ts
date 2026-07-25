@@ -107,6 +107,9 @@ export type HistoricalFormulaTrialObservation = {
   id: string;
   entryAtMs: number;
   exitAtMs: number;
+  /** Observed source-bar opens used by the retrospective replay, not executable fills. */
+  entryPrice?: number;
+  exitPrice?: number;
   grossBps: number;
   netBps: number;
   netSimpleReturn: number;
@@ -485,6 +488,8 @@ function observationsFor(
       id: `${trial.id}:${point.id}`,
       entryAtMs: point.entryAtMs,
       exitAtMs: point.exitAtMs,
+      entryPrice: point.entryPrice,
+      exitPrice: point.exitPrice,
       grossBps: point.shortGrossBps,
       netBps: point.shortNetBps,
       netSimpleReturn: point.shortNetSimpleReturn,

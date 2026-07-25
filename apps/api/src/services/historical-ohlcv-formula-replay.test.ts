@@ -128,6 +128,12 @@ test("period observations are opt-in and preserve the ordinary receipt shape", (
   assert.ok(captured.trials.every((trial) =>
     trial.observations!.every((observation, index, observations) =>
       index === 0 || observation.entryAtMs >= observations[index - 1]!.exitAtMs)));
+  assert.ok(captured.trials.every((trial) =>
+    trial.observations!.every((observation) =>
+      Number.isFinite(observation.entryPrice)
+      && Number.isFinite(observation.exitPrice)
+      && observation.entryPrice! > 0
+      && observation.exitPrice! > 0)));
   const stripped = {
     ...captured,
     trials: captured.trials.map(({ observations: _observations, ...trial }) => trial),

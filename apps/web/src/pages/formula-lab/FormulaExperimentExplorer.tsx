@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RouterOutput } from "@framework/api/router";
+import { TimeSeriesChart } from "@/components/ui/time-series-chart";
+import { trpc } from "@/lib/trpc";
 import {
   nextSortState,
   PolymarketSortableHeader,
@@ -14,6 +16,8 @@ type CalendarData = RouterOutput["formulaLab"]["calendarPeriods"];
 type CalendarExperiment = CalendarData["experiments"][number];
 type CalendarTrial = CalendarExperiment["trials"][number];
 type CalendarPeriod = CalendarTrial["periods"][number];
+type HistoricalCapitalSimulation =
+  RouterOutput["formulaLab"]["historicalCapitalSimulation"];
 
 type UnifiedResult = {
   key: string;
@@ -34,6 +38,9 @@ type UnifiedResult = {
   finalEquityUsd: number | null;
   sampleComplete: boolean;
   sampleNote: string | null;
+  chartIntervalMinutes: 5 | 60 | null;
+  trialId: string;
+  hasTradeLedger: boolean;
 };
 
 type UnifiedSortKey =
@@ -161,6 +168,9 @@ function historicalRows(data: FormulaLab): UnifiedResult[] {
         finalEquityUsd: trial.finalEquityUsd,
         sampleComplete: trial.available,
         sampleNote: trial.unavailableReason,
+        chartIntervalMinutes: input.chart === "5m" ? 5 : 60,
+        trialId: trial.id,
+        hasTradeLedger: trial.trades > 0,
       });
     }
   };
@@ -233,6 +243,9 @@ function venueRows(preview: VenuePreview | undefined): UnifiedResult[] {
     finalEquityUsd: null,
     sampleComplete: trial.available,
     sampleNote: trial.unavailableReason,
+    chartIntervalMinutes: null,
+    trialId: trial.candidateId,
+    hasTradeLedger: false,
   }));
 }
 
@@ -248,6 +261,7 @@ export function FormulaExperimentExplorer({
   const [exit, setExit] = useState<"all" | string>("all");
   const [winBand, setWinBand] = useState<"all" | "above50" | "40to50" | "below40" | "none">("all");
   const [sample, setSample] = useState<"all" | "complete" | "sparse">("all");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState<UnifiedSortKey>>({
     key: "hitRate",
     direction: "desc",
@@ -302,6 +316,18 @@ export function FormulaExperimentExplorer({
       : Math.max(best, row.hitRate ?? Number.NEGATIVE_INFINITY),
     null,
   );
+  const defaultSelectedRow =
+    allRows.find(
+      (row) =>
+        row.chart === "1h"
+        && row.exitMinutes === 1_440
+        && row.trialId === "albert-short-low:z1",
+    )
+    ?? allRows.find((row) => row.hasTradeLedger)
+    ?? null;
+  const selectedRow =
+    allRows.find((row) => row.key === selectedKey)
+    ?? defaultSelectedRow;
 
   return (
     <section className="overflow-hidden rounded-xl border bg-card">
@@ -427,6 +453,14 @@ export function FormulaExperimentExplorer({
         </p>
       </details>
 
+      <p className="border-b bg-muted/10 px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+        <span className="font-semibold text-foreground">Frozen equity contract:</span>{" "}
+        $10,000 starting equity, fixed $1,000 notional per trade, no compounding, one open
+        position, and only chronological holdout trades. The archived result used a generic
+        10 bps round-trip cost. Open a row below to replace that shortcut with explicit
+        Hyperliquid fees, slippage, funding, leverage, and sizing.
+      </p>
+
       <div className="max-h-[46rem] overflow-auto">
         <table className="w-full min-w-[1460px] text-xs tabular-nums">
           <thead className="sticky top-0 z-20 border-b bg-card text-[10px] uppercase tracking-[0.11em] text-muted-foreground">
@@ -442,7 +476,7 @@ export function FormulaExperimentExplorer({
               <PolymarketSortableHeader column="net" active={sort.key} direction={sort.direction} onSort={sortRows} align="right">Net mean</PolymarketSortableHeader>
               <PolymarketSortableHeader column="folds" active={sort.key} direction={sort.direction} onSort={sortRows} align="right">Positive folds</PolymarketSortableHeader>
               <PolymarketSortableHeader column="worst" active={sort.key} direction={sort.direction} onSort={sortRows} align="right">Worst fold</PolymarketSortableHeader>
-              <PolymarketSortableHeader column="equity" active={sort.key} direction={sort.direction} onSort={sortRows} align="right">Final equity</PolymarketSortableHeader>
+              <PolymarketSortableHeader column="equity" active={sort.key} direction={sort.direction} onSort={sortRows} align="right">Frozen end equity</PolymarketSortableHeader>
               <PolymarketSortableHeader column="sample" active={sort.key} direction={sort.direction} onSort={sortRows}>Sample note</PolymarketSortableHeader>
             </tr>
           </thead>
@@ -461,6 +495,21 @@ export function FormulaExperimentExplorer({
                   <div className="mt-0.5 truncate text-[10px] text-muted-foreground" title={row.formula}>
                     {row.formula}
                   </div>
+                  {row.hasTradeLedger ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedKey(row.key)}
+                      className={`mt-2 rounded border px-2 py-1 text-[10px] font-semibold ${
+                        selectedRow?.key === row.key
+                          ? "border-foreground/30 bg-foreground text-background"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      {selectedRow?.key === row.key
+                        ? "Simulator open"
+                        : "Open trades & simulator"}
+                    </button>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3 text-right font-mono">{row.trades.toLocaleString()}</td>
                 <td className={`px-4 py-3 text-right font-mono font-semibold ${
@@ -491,7 +540,18 @@ export function FormulaExperimentExplorer({
                 <td className="px-4 py-3 text-right font-mono">
                   {row.finalEquityUsd == null
                     ? "n/a"
-                    : `$${row.finalEquityUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
+                    : (
+                      <>
+                        <div>
+                          ${row.finalEquityUsd.toLocaleString("en-US", {
+                            maximumFractionDigits: 0,
+                          })}
+                        </div>
+                        <div className="mt-0.5 text-[9px] text-muted-foreground">
+                          from $10,000
+                        </div>
+                      </>
+                    )}
                 </td>
                 <td className="max-w-56 px-4 py-3">
                   <span className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
@@ -523,7 +583,470 @@ export function FormulaExperimentExplorer({
         Sorting and filtering are descriptive only. Result rows may overlap and cannot be summed
         into a portfolio. No row is selected, exported, registered, or connected to execution.
       </p>
+      {selectedRow?.chartIntervalMinutes ? (
+        <HistoricalCapitalInspector row={selectedRow} />
+      ) : null}
     </section>
+  );
+}
+
+type CapitalAssumptions = {
+  initialCapitalUsd: number;
+  sizingMode:
+    | "fixed-notional"
+    | "equity-fraction-notional"
+    | "fixed-risk"
+    | "equity-fraction-risk";
+  sizingValue: number;
+  compoundSizing: boolean;
+  leverage: number;
+  plannedLossPct: number;
+  takerFeeBpsPerSide: number;
+  slippageBpsPerSide: number;
+  fundingBpsPerDay: number;
+};
+
+const defaultCapitalAssumptions: CapitalAssumptions = {
+  initialCapitalUsd: 10_000,
+  sizingMode: "fixed-notional",
+  sizingValue: 1_000,
+  compoundSizing: false,
+  leverage: 1,
+  plannedLossPct: 100,
+  takerFeeBpsPerSide: 4.5,
+  slippageBpsPerSide: 0.5,
+  fundingBpsPerDay: 0,
+};
+
+const compactUsd = (value: number | null) =>
+  value == null
+    ? "n/a"
+    : `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })}`;
+
+const formatUtc = (atMs: number | null) =>
+  atMs == null
+    ? "n/a"
+    : new Date(atMs).toLocaleString("en-US", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+function HistoricalCapitalInspector({ row }: { row: UnifiedResult }) {
+  const [draft, setDraft] = useState(defaultCapitalAssumptions);
+  const [assumptions, setAssumptions] = useState(defaultCapitalAssumptions);
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [row.key]);
+
+  const simulation = trpc.formulaLab.historicalCapitalSimulation.useQuery({
+    chartIntervalMinutes: row.chartIntervalMinutes!,
+    holdMinutes: row.exitMinutes,
+    trialId: row.trialId,
+    ...assumptions,
+    page,
+    pageSize: 50,
+  }, {
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const result = simulation.data;
+
+  const setNumber = (
+    key: Exclude<keyof CapitalAssumptions, "sizingMode" | "compoundSizing">,
+    value: string,
+  ) => {
+    const parsed = Number(value);
+    setDraft((current) => ({
+      ...current,
+      [key]: Number.isFinite(parsed) ? parsed : 0,
+    }));
+  };
+  const sizingIsPercent =
+    draft.sizingMode === "equity-fraction-notional"
+    || draft.sizingMode === "equity-fraction-risk";
+  const sizingIsRisk =
+    draft.sizingMode === "fixed-risk"
+    || draft.sizingMode === "equity-fraction-risk";
+
+  return (
+    <section className="border-t bg-muted/5">
+      <header className="border-b px-4 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Trade path & capital simulator
+            </div>
+            <h3 className="mt-1 text-base font-semibold">
+              {row.trial} · {row.chart} chart · {horizonLabel(row.exitMinutes)} forced exit
+            </h3>
+            <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+              Each point is realized equity after an exact chronological holdout trade exits.
+              Entries and exits use observed OHLCV bar opens; they are not reconstructed
+              executable fills. One position is allowed at a time.
+            </p>
+          </div>
+          {result ? (
+            <div className="text-right text-[11px] text-muted-foreground">
+              <div className="font-mono font-semibold text-foreground">
+                {formatUtc(result.period.scoredStartAtMs)} UTC
+              </div>
+              <div>through {formatUtc(result.period.scoredEndAtMs)} UTC</div>
+              <div>
+                source tape {formatUtc(result.period.sourceStartAtMs)}–{
+                  formatUtc(result.period.sourceEndAtMs)
+                } UTC
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </header>
+
+      <div className="grid gap-3 border-b p-4 sm:grid-cols-2 xl:grid-cols-5">
+        <NumberControl
+          label="Starting equity"
+          value={draft.initialCapitalUsd}
+          prefix="$"
+          min={100}
+          step={1_000}
+          onChange={(value) => setNumber("initialCapitalUsd", value)}
+        />
+        <FilterSelect
+          label="Position sizing"
+          value={draft.sizingMode}
+          onChange={(value) => setDraft((current) => ({
+            ...current,
+            sizingMode: value as CapitalAssumptions["sizingMode"],
+          }))}
+          options={[
+            ["fixed-notional", "Fixed trade notional ($)"],
+            ["equity-fraction-notional", "Equity share as notional (%)"],
+            ["fixed-risk", "Fixed planned risk ($)"],
+            ["equity-fraction-risk", "Equity share at risk (%)"],
+          ]}
+        />
+        <NumberControl
+          label={sizingIsRisk
+            ? `Planned risk ${sizingIsPercent ? "(%)" : "($)"}`
+            : `Trade notional ${sizingIsPercent ? "(%)" : "($)"}`}
+          value={draft.sizingValue}
+          prefix={sizingIsPercent ? undefined : "$"}
+          suffix={sizingIsPercent ? "%" : undefined}
+          min={0.01}
+          max={sizingIsPercent ? 100 : undefined}
+          step={sizingIsPercent ? 0.25 : 100}
+          onChange={(value) => setNumber("sizingValue", value)}
+        />
+        <NumberControl
+          label="Leverage"
+          value={draft.leverage}
+          suffix="×"
+          min={1}
+          max={50}
+          step={1}
+          onChange={(value) => setNumber("leverage", value)}
+        />
+        <NumberControl
+          label="Planned loss of notional"
+          value={draft.plannedLossPct}
+          suffix="%"
+          min={0.01}
+          max={100}
+          step={0.25}
+          onChange={(value) => setNumber("plannedLossPct", value)}
+        />
+        <NumberControl
+          label="HL taker fee / side"
+          value={draft.takerFeeBpsPerSide}
+          suffix="bps"
+          min={0}
+          max={100}
+          step={0.1}
+          onChange={(value) => setNumber("takerFeeBpsPerSide", value)}
+        />
+        <NumberControl
+          label="Slippage / side"
+          value={draft.slippageBpsPerSide}
+          suffix="bps"
+          min={0}
+          max={100}
+          step={0.1}
+          onChange={(value) => setNumber("slippageBpsPerSide", value)}
+        />
+        <NumberControl
+          label="Funding / day"
+          value={draft.fundingBpsPerDay}
+          suffix="bps"
+          min={-1_000}
+          max={1_000}
+          step={0.1}
+          onChange={(value) => setNumber("fundingBpsPerDay", value)}
+        />
+        <label className="flex h-full min-h-16 items-center gap-2 rounded-md border bg-background px-3">
+          <input
+            type="checkbox"
+            checked={draft.compoundSizing}
+            onChange={(event) => setDraft((current) => ({
+              ...current,
+              compoundSizing: event.target.checked,
+            }))}
+          />
+          <span>
+            <span className="block text-xs font-semibold">Compound sizing</span>
+            <span className="block text-[10px] text-muted-foreground">
+              Recalculate percentage sizing from realized equity
+            </span>
+          </span>
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setAssumptions(draft);
+            setPage(1);
+          }}
+          className="min-h-16 rounded-md border bg-foreground px-4 text-xs font-semibold text-background hover:opacity-90"
+        >
+          Run capital simulation
+        </button>
+      </div>
+
+      <div className="border-b bg-warning/5 px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
+        <span className="font-semibold text-foreground">Execution cost model:</span>{" "}
+        Hyperliquid base tier-0 perpetual taker fee is modeled at 4.5 bps on entry and on
+        exit notional. The default adds 0.5 bps slippage per side. Funding is charged
+        pro rata for the hold and defaults to zero because OHLCV contains no historical
+        funding series.{" "}
+        <a
+          href="https://hyperliquid.gitbook.io/hyperliquid-docs/trading/fees"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-foreground underline underline-offset-2"
+        >
+          Hyperliquid fee schedule
+        </a>
+        . Risk sizing is a notional-sizing model only; no stop is simulated, so realized
+        loss can exceed planned risk.
+      </div>
+
+      {simulation.isLoading ? (
+        <div className="p-10 text-center text-sm text-muted-foreground">
+          Replaying the frozen trade ledger…
+        </div>
+      ) : simulation.error ? (
+        <div className="p-6 text-sm text-destructive">
+          {simulation.error.message}
+        </div>
+      ) : result ? (
+        <>
+          <SimulationSummary result={result} />
+          <div className="border-b p-4">
+            <div className="mb-3">
+              <h4 className="text-sm font-semibold">Realized equity path</h4>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Starts at {compactUsd(result.summary.startingCapitalUsd)} on the first
+                eligible entry and marks equity only when a position exits. Hover or scrub
+                to inspect the path.
+              </p>
+            </div>
+            <TimeSeriesChart
+              points={result.equityCurve.map((point) => ({
+                t: point.atMs,
+                v: point.equityUsd,
+              }))}
+              money
+              height={240}
+            />
+          </div>
+          <HistoricalTradeLedger
+            result={result}
+            page={page}
+            onPage={setPage}
+          />
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function SimulationSummary({ result }: { result: HistoricalCapitalSimulation }) {
+  const summary = result.summary;
+  const cells = [
+    ["Starting equity", compactUsd(summary.startingCapitalUsd), "User-selected initial balance"],
+    ["Ending equity", compactUsd(summary.finalEquityUsd), `${summary.totalReturnPct >= 0 ? "+" : ""}${summary.totalReturnPct.toFixed(2)}% return`],
+    ["Realized P&L", compactUsd(summary.totalPnlUsd), `${summary.executedTrades.toLocaleString()} executed trades`],
+    ["Maximum drawdown", compactUsd(-summary.maximumDrawdownUsd), `${summary.maximumDrawdownPct.toFixed(2)}% from realized peak`],
+    ["Win rate", formatPercent(summary.winRate), `${summary.wins} wins · ${summary.losses} losses · ${summary.flats} flat`],
+    ["Average notional", compactUsd(summary.averageNotionalUsd), `${compactUsd(summary.maximumCapitalReservedUsd)} max margin reserved`],
+    ["Profit factor", summary.profitFactor == null ? "n/a" : summary.profitFactor.toFixed(2), `${compactUsd(summary.largestWinUsd)} best · ${compactUsd(summary.largestLossUsd)} worst`],
+    ["Risk breaches", summary.riskBreaches.toLocaleString(), "Realized loss exceeded planned risk"],
+  ];
+  return (
+    <div className="grid border-b sm:grid-cols-2 lg:grid-cols-4">
+      {cells.map(([label, value, note]) => (
+        <article key={label} className="border-b p-4 last:border-b-0 sm:border-r lg:[&:nth-last-child(-n+4)]:border-b-0">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {label}
+          </div>
+          <div className="mt-2 font-mono text-xl font-semibold">{value}</div>
+          <p className="mt-1 text-[10px] text-muted-foreground">{note}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function HistoricalTradeLedger({
+  result,
+  page,
+  onPage,
+}: {
+  result: HistoricalCapitalSimulation;
+  page: number;
+  onPage: (page: number) => void;
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+        <div>
+          <h4 className="text-sm font-semibold">Exact simulated trades</h4>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            UTC entry and exit clocks, observed prices, modeled costs, and realized equity.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-[11px]">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPage(Math.max(1, page - 1))}
+            className="rounded border px-2.5 py-1.5 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="font-mono text-muted-foreground">
+            {page}/{result.trades.pages} · {result.trades.total} trades
+          </span>
+          <button
+            type="button"
+            disabled={page >= result.trades.pages}
+            onClick={() => onPage(Math.min(result.trades.pages, page + 1))}
+            className="rounded border px-2.5 py-1.5 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+      <div className="max-h-[34rem] overflow-auto">
+        <table className="w-full min-w-[1480px] text-xs tabular-nums">
+          <thead className="sticky top-0 z-10 border-b bg-card text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            <tr>
+              {[
+                "#",
+                "Entry UTC",
+                "Exit UTC",
+                "Entry price",
+                "Exit price",
+                "Notional",
+                "Planned risk",
+                "Gross return",
+                "Fees + slippage",
+                "Funding",
+                "Net return",
+                "P&L",
+                "Equity after",
+              ].map((label) => (
+                <th key={label} className="px-4 py-2 text-right first:text-left">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {result.trades.rows.map((trade) => (
+              <tr key={trade.sequence} className="hover:bg-muted/10">
+                <td className="px-4 py-2.5 font-mono">{trade.sequence}</td>
+                <td className="px-4 py-2.5 text-right font-mono">{formatUtc(trade.entryAtMs)}</td>
+                <td className="px-4 py-2.5 text-right font-mono">{formatUtc(trade.exitAtMs)}</td>
+                <td className="px-4 py-2.5 text-right font-mono">${trade.entryPrice.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
+                <td className="px-4 py-2.5 text-right font-mono">${trade.exitPrice.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
+                <td className="px-4 py-2.5 text-right font-mono">{compactUsd(trade.notionalUsd)}</td>
+                <td className="px-4 py-2.5 text-right font-mono">
+                  {compactUsd(trade.plannedRiskUsd)}
+                  {trade.riskBreached ? (
+                    <span className="ml-1 text-[9px] font-semibold text-warning">breached</span>
+                  ) : null}
+                </td>
+                <td className={`px-4 py-2.5 text-right font-mono ${trade.grossReturnBps >= 0 ? "text-success" : "text-destructive"}`}>
+                  {formatBps(trade.grossReturnBps)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono text-destructive">
+                  -{compactUsd(trade.tradingCostUsd)}
+                </td>
+                <td className={`px-4 py-2.5 text-right font-mono ${trade.fundingCostUsd <= 0 ? "text-success" : "text-destructive"}`}>
+                  {trade.fundingCostUsd === 0
+                    ? "$0"
+                    : `${trade.fundingCostUsd > 0 ? "-" : "+"}${compactUsd(Math.abs(trade.fundingCostUsd))}`}
+                </td>
+                <td className={`px-4 py-2.5 text-right font-mono ${trade.netReturnBps >= 0 ? "text-success" : "text-destructive"}`}>
+                  {formatBps(trade.netReturnBps)}
+                </td>
+                <td className={`px-4 py-2.5 text-right font-mono font-semibold ${trade.pnlUsd >= 0 ? "text-success" : "text-destructive"}`}>
+                  {compactUsd(trade.pnlUsd)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono font-semibold">
+                  {compactUsd(trade.equityAfterUsd)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function NumberControl({
+  label,
+  value,
+  prefix,
+  suffix,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  prefix?: string;
+  suffix?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span className="flex h-9 items-center rounded-md border bg-background px-2.5">
+        {prefix ? <span className="mr-1 text-xs text-muted-foreground">{prefix}</span> : null}
+        <input
+          type="number"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none"
+        />
+        {suffix ? <span className="ml-1 text-xs text-muted-foreground">{suffix}</span> : null}
+      </span>
+    </label>
   );
 }
 

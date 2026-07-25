@@ -11,6 +11,9 @@ import {
 import {
   HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT,
 } from "../services/historical-albert-calendar-period-receipt.ts";
+import {
+  simulateHistoricalAlbertCapital,
+} from "../services/historical-albert-capital-simulator.ts";
 
 /**
  * Jester-wide, venue-neutral formula research.
@@ -24,6 +27,29 @@ export const formulaLabRouter = t.router({
   calendarPeriods: protectedProcedure.query(
     () => HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT,
   ),
+  historicalCapitalSimulation: protectedProcedure
+    .input(z.object({
+      chartIntervalMinutes: z.union([z.literal(5), z.literal(60)]),
+      holdMinutes: z.number().int().positive(),
+      trialId: z.string().min(1).max(80),
+      initialCapitalUsd: z.number().min(100).max(100_000_000),
+      sizingMode: z.enum([
+        "fixed-notional",
+        "equity-fraction-notional",
+        "fixed-risk",
+        "equity-fraction-risk",
+      ]),
+      sizingValue: z.number().positive(),
+      compoundSizing: z.boolean(),
+      leverage: z.number().min(1).max(50),
+      plannedLossPct: z.number().positive().max(100),
+      takerFeeBpsPerSide: z.number().min(-10).max(100),
+      slippageBpsPerSide: z.number().min(0).max(100),
+      fundingBpsPerDay: z.number().min(-1_000).max(1_000),
+      page: z.number().int().min(1),
+      pageSize: z.number().int().min(10).max(200),
+    }))
+    .query(({ input }) => simulateHistoricalAlbertCapital(input)),
   scaleStatus: protectedProcedure.query(() => formulaicScaleStatus()),
   controlPlaneStatus: protectedProcedure.query(() => researchControlPlaneStatus()),
   validationSummary: protectedProcedure

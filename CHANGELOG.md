@@ -4,6 +4,35 @@ All notable Alchemy changes are recorded here. Versions follow Semantic Versioni
 application and its research interfaces; research contracts retain their own immutable version
 identifiers.
 
+## [0.3.0] - 2026-07-25
+
+### Added
+
+- Exact, integrity-checked chronological trade ledgers for all supported historical Albert chart
+  and forced-exit experiments.
+- Configurable Formula Lab capital simulator with starting equity, four sizing modes, compounding,
+  leverage, planned-loss sizing, and explicit risk-budget breach reporting.
+- Interactive realized-equity chart and paginated entry/exit ledger with timestamps, prices,
+  notional, gross return, execution costs, funding, net return, P&L, and post-trade equity.
+- Hyperliquid-aware cost assumptions: editable taker fee per fill, slippage per side, and funding
+  per day, with official venue documentation linked in-product.
+
+### Changed
+
+- Renamed historical `Final equity` to `Frozen end equity` and disclosed its $10,000 starting
+  balance, fixed $1,000 notional, non-compounding, one-position, holdout-only contract.
+- Historical result rows can open their exact scored period, source-tape period, trade path, and
+  capital simulation without modifying the frozen receipt.
+
+### Safety
+
+- Historical OHLCV opens remain research marks, not executable fills. Funding defaults to zero
+  because the imported OHLCV contains no historical funding ledger.
+- Risk-based sizing derives notional from a planned loss but simulates no stop; realized
+  risk-budget breaches are surfaced rather than hidden.
+- The simulator is query-only and cannot select a winner, register a strategy, create a paper bot,
+  access an account, sign an order, or enable execution.
+
 ## [0.2.1] - 2026-07-25
 
 ### Added
