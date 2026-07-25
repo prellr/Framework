@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { db, users, sessions, accounts, verifications } from "@framework/db";
+import { recordSuccessfulLogin } from "./services/login-history.ts";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -39,6 +40,27 @@ export const auth = betterAuth({
     process.env.BETTER_AUTH_URL ?? "http://localhost:3001",
     ...(process.env.TRUSTED_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
   ],
+  databaseHooks: {
+    session: {
+      create: {
+        after: async (session, context) => {
+          await recordSuccessfulLogin({
+            session: {
+              id: session.id,
+              userId: session.userId,
+              ipAddress: session.ipAddress,
+              userAgent: session.userAgent,
+              impersonatedBy:
+                typeof session.impersonatedBy === "string"
+                  ? session.impersonatedBy
+                  : null,
+            },
+            authPath: context?.path ?? null,
+          });
+        },
+      },
+    },
+  },
   plugins: [
     admin({
       defaultRole: "viewer",

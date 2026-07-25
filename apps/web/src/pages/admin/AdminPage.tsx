@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { UserPlus, KeyRound, Trash2, Save } from "lucide-react";
+import { useMemo, useState } from "react";
+import type { RouterOutput } from "@framework/api/router";
+import { UserPlus, KeyRound, Trash2, Save, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,35 +10,65 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { TZ_OPTIONS, VIEWER_TZ, tzLabel, effectiveTz } from "@/lib/tz";
+import {
+  nextSortState,
+  PolymarketSortableHeader,
+  stableSortRows,
+  type SortState,
+  type SortValue,
+} from "@/pages/polymarket/PolymarketSortableHeader";
 
 const ROLES = ["viewer", "operator", "manager", "admin"] as const;
 type RoleOption = (typeof ROLES)[number];
+type AdminTab = "users" | "login-history" | "settings";
+type LoginEvent = RouterOutput["admin"]["loginHistory"]["events"][number];
+type LoginSortKey = "at" | "user" | "method" | "ip" | "agent";
+
+function loginValue(event: LoginEvent, key: LoginSortKey): SortValue {
+  switch (key) {
+    case "at": return new Date(event.createdAt).getTime();
+    case "user": return `${event.userName} ${event.userEmail}`;
+    case "method": return event.authMethod;
+    case "ip": return event.ipAddress;
+    case "agent": return event.userAgent;
+  }
+}
 
 export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
-  const [tab, setTab] = useState<"users" | "settings">("users");
+  const [tab, setTab] = useState<AdminTab>("users");
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin" subtitle="Users and runtime settings" />
+      <PageHeader title="Admin" subtitle="Users, successful login history, and runtime settings" />
 
       <div className="flex gap-2 border-b">
-        {(["users", "settings"] as const).map((t) => (
+        {([
+          ["users", "Users"],
+          ["login-history", "Login history"],
+          ["settings", "Settings"],
+        ] as const).map(([key, label]) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={key}
+            onClick={() => setTab(key)}
             className={cn(
-              "border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors",
-              tab === t
+              "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+              tab === key
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            {t}
+            {label}
           </button>
         ))}
       </div>
 
-      {tab === "users" ? <UsersTab /> : <SettingsTab />}
+      {tab === "users" ? (
+        <UsersTab />
+      ) : tab === "login-history" ? (
+        <LoginHistoryTab />
+      ) : (
+        <SettingsTab />
+      )}
     </div>
   );
 }
@@ -203,6 +234,161 @@ function UsersTab() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ── Login history ─────────────────────────────────────────────────────────────
+
+function LoginHistoryTab() {
+  const limit = 100;
+  const [userId, setUserId] = useState("all");
+  const [offset, setOffset] = useState(0);
+  const [sort, setSort] = useState<SortState<LoginSortKey>>({
+    key: "at",
+    direction: "desc",
+  });
+  const users = trpc.admin.listUsers.useQuery();
+  const history = trpc.admin.loginHistory.useQuery({
+    userId: userId === "all" ? undefined : userId,
+    limit,
+    offset,
+  });
+  const rows = useMemo(
+    () =>
+      stableSortRows(
+        history.data?.events ?? [],
+        (event) => loginValue(event, sort.key),
+        sort.direction,
+      ),
+    [history.data, sort],
+  );
+  const timezone = effectiveTz(undefined);
+  const sortRows = (
+    key: LoginSortKey,
+    initialDirection: "asc" | "desc" = "asc",
+  ) => setSort((current) => nextSortState(current, key, initialDirection));
+  const total = history.data?.total ?? 0;
+  const first = total === 0 ? 0 : offset + 1;
+  const last = Math.min(total, offset + limit);
+
+  return (
+    <Card>
+      <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Successful logins
+          </CardTitle>
+          <CardDescription className="mt-1">
+            Append-only session creation history. Passwords, cookies, and session tokens are never
+            stored in or returned by this view.
+          </CardDescription>
+        </div>
+        <div className="w-full sm:w-72">
+          <Label htmlFor="login-user-filter" className="text-xs">User</Label>
+          <select
+            id="login-user-filter"
+            value={userId}
+            onChange={(event) => {
+              setUserId(event.target.value);
+              setOffset(0);
+            }}
+            className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          >
+            <option value="all">All users</option>
+            {users.data?.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name} · {user.email}
+              </option>
+            ))}
+          </select>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {history.isLoading ? (
+          <div className="h-56 animate-pulse bg-muted/20" />
+        ) : history.isError ? (
+          <div className="px-6 py-8 text-sm text-destructive">
+            Login history is unavailable: {history.error.message}
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+            No successful logins have been recorded for this scope yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto border-y">
+            <table className="w-full min-w-[960px] text-sm">
+              <thead className="bg-muted/20 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                <tr>
+                  <PolymarketSortableHeader column="at" active={sort.key} direction={sort.direction} onSort={sortRows}>Signed in</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="user" active={sort.key} direction={sort.direction} onSort={sortRows}>User</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="method" active={sort.key} direction={sort.direction} onSort={sortRows}>Method</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="ip" active={sort.key} direction={sort.direction} onSort={sortRows}>IP address</PolymarketSortableHeader>
+                  <PolymarketSortableHeader column="agent" active={sort.key} direction={sort.direction} onSort={sortRows}>Browser / client</PolymarketSortableHeader>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((event) => (
+                  <tr key={event.id} className="align-top hover:bg-muted/10">
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div className="font-medium">
+                        {new Date(event.createdAt).toLocaleString(undefined, {
+                          timeZone: timezone,
+                          dateStyle: "medium",
+                          timeStyle: "medium",
+                        })}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">{timezone}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{event.userName}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{event.userEmail}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="secondary">{event.authMethod}</Badge>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {event.ipAddress ?? "—"}
+                    </td>
+                    <td
+                      className="max-w-md px-4 py-3 text-xs leading-relaxed text-muted-foreground"
+                      title={event.userAgent ?? undefined}
+                    >
+                      <span className="line-clamp-2">{event.userAgent ?? "—"}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-muted-foreground">
+          <span>
+            Showing {first.toLocaleString()}–{last.toLocaleString()} of {total.toLocaleString()}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={offset === 0 || history.isFetching}
+              onClick={() => setOffset(Math.max(0, offset - limit))}
+            >
+              <ChevronLeft className="mr-1 h-3.5 w-3.5" />
+              Newer
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={offset + limit >= total || history.isFetching}
+              onClick={() => setOffset(offset + limit)}
+            >
+              Older
+              <ChevronRight className="ml-1 h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

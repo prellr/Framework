@@ -1,5 +1,6 @@
 export * from "./users.ts";
 export * from "./audit-logs.ts";
+export * from "./login-events.ts";
 export * from "./settings.ts";
 export * from "./notes.ts";
 export * from "./jester-credentials.ts";

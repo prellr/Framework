@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { adminProcedure, protectedProcedure } from "../trpc/middleware.ts";
 import { t } from "../trpc/context.ts";
-import { db, users, appSettings } from "@framework/db";
-import { eq } from "drizzle-orm";
+import { db, users, appSettings, loginEvents } from "@framework/db";
+import { count, desc, eq } from "drizzle-orm";
 import type { Role } from "@framework/db";
 import { auth } from "../auth.ts";
 import { getSetting, setSetting } from "../services/config.ts";
@@ -52,6 +52,44 @@ export const adminRouter = t.router({
       .from(users)
       .orderBy(users.createdAt);
   }),
+
+  // Durable successful-login history (admin only). Session tokens are never exposed.
+  loginHistory: adminProcedure
+    .input(
+      z.object({
+        userId: z.string().optional(),
+        limit: z.number().int().min(1).max(250).default(100),
+        offset: z.number().int().min(0).default(0),
+      }),
+    )
+    .query(async ({ input }) => {
+      const where = input.userId ? eq(loginEvents.userId, input.userId) : undefined;
+      const [events, totals] = await Promise.all([
+        db
+          .select({
+            id: loginEvents.id,
+            userId: loginEvents.userId,
+            userName: loginEvents.userName,
+            userEmail: loginEvents.userEmail,
+            authMethod: loginEvents.authMethod,
+            ipAddress: loginEvents.ipAddress,
+            userAgent: loginEvents.userAgent,
+            createdAt: loginEvents.createdAt,
+          })
+          .from(loginEvents)
+          .where(where)
+          .orderBy(desc(loginEvents.createdAt), desc(loginEvents.id))
+          .limit(input.limit)
+          .offset(input.offset),
+        db.select({ value: count() }).from(loginEvents).where(where),
+      ]);
+      return {
+        events,
+        total: totals[0]?.value ?? 0,
+        limit: input.limit,
+        offset: input.offset,
+      };
+    }),
 
   // Create a new user (admin only)
   createUser: adminProcedure

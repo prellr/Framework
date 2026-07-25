@@ -10,8 +10,9 @@ Tailwind CSS v4 · Docker Compose + nginx deploy.
 **Included out of the box**
 - Email/password auth with roles (`viewer / operator / manager / admin`), login /
   forgot-password / reset-password pages
-- Admin page: user management (create, role, password reset, remove) + runtime
-  settings editor backed by the `app_settings` table
+- Admin page: user management (create, role, password reset, remove), durable
+  successful-login history, and a runtime settings editor backed by the
+  `app_settings` table
 - `getSetting()` runtime config: DB override first, env var fallback — rotate
   credentials without restarts
 - Audit log table + `audit()` helper
