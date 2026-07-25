@@ -53,7 +53,7 @@ async function requireRole(minRole: string) {
 
 const rootRoute = createRootRoute({
   notFoundComponent: () => (
-    <div className="flex h-screen items-center justify-center text-muted-foreground">
+    <div className="text-muted-foreground flex h-screen items-center justify-center">
       Page not found or not yet built.
     </div>
   ),
@@ -142,7 +142,9 @@ const sweepsRoute = createRoute({
 const sweepsHistoryRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/sweeps/history",
-  beforeLoad: () => { throw redirect({ to: "/sweeps" }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/sweeps" });
+  },
   component: SweepsHistory,
 });
 
@@ -161,7 +163,9 @@ const analyticsRoute = createRoute({
 const resultsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/results",
-  beforeLoad: () => { throw redirect({ to: "/analytics" }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/analytics" });
+  },
   component: ResultsExplorer,
 });
 
@@ -193,22 +197,36 @@ const polymarketStrategyRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/strategy/$botKey",
   component: PolymarketStrategyDetailPage,
-  validateSearch: (search: Record<string, unknown>): {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
     scope?: "paper" | "forward" | "history";
     period?: "24h" | "3d" | "7d" | "30d" | "all";
     horizon?: 5 | 15;
     assets?: string;
+    stake?: 5 | 10 | 20;
   } => {
     const out: {
       scope?: "paper" | "forward" | "history";
       period?: "24h" | "3d" | "7d" | "30d" | "all";
       horizon?: 5 | 15;
       assets?: string;
+      stake?: 5 | 10 | 20;
     } = {};
-    if (search.scope === "paper" || search.scope === "forward" || search.scope === "history") out.scope = search.scope;
-    if (search.period === "24h" || search.period === "3d" || search.period === "7d" || search.period === "30d" || search.period === "all") out.period = search.period;
-    if (Number(search.horizon) === 5 || Number(search.horizon) === 15) out.horizon = Number(search.horizon) as 5 | 15;
+    if (search.scope === "paper" || search.scope === "forward" || search.scope === "history")
+      out.scope = search.scope;
+    if (
+      search.period === "24h" ||
+      search.period === "3d" ||
+      search.period === "7d" ||
+      search.period === "30d" ||
+      search.period === "all"
+    )
+      out.period = search.period;
+    if (Number(search.horizon) === 5 || Number(search.horizon) === 15)
+      out.horizon = Number(search.horizon) as 5 | 15;
     if (typeof search.assets === "string" && search.assets.length <= 64) out.assets = search.assets;
+    if ([5, 10, 20].includes(Number(search.stake))) out.stake = Number(search.stake) as 5 | 10 | 20;
     return out;
   },
 });
@@ -217,7 +235,9 @@ const polymarketAssetRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/asset/$asset",
   component: PolymarketAssetDetailPage,
-  validateSearch: (search: Record<string, unknown>): {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
     scope?: "paper" | "forward" | "history";
     period?: "24h" | "3d" | "7d" | "30d" | "all";
     horizon?: 5 | 15;
@@ -227,9 +247,18 @@ const polymarketAssetRoute = createRoute({
       period?: "24h" | "3d" | "7d" | "30d" | "all";
       horizon?: 5 | 15;
     } = {};
-    if (search.scope === "paper" || search.scope === "forward" || search.scope === "history") out.scope = search.scope;
-    if (search.period === "24h" || search.period === "3d" || search.period === "7d" || search.period === "30d" || search.period === "all") out.period = search.period;
-    if (Number(search.horizon) === 5 || Number(search.horizon) === 15) out.horizon = Number(search.horizon) as 5 | 15;
+    if (search.scope === "paper" || search.scope === "forward" || search.scope === "history")
+      out.scope = search.scope;
+    if (
+      search.period === "24h" ||
+      search.period === "3d" ||
+      search.period === "7d" ||
+      search.period === "30d" ||
+      search.period === "all"
+    )
+      out.period = search.period;
+    if (Number(search.horizon) === 5 || Number(search.horizon) === 15)
+      out.horizon = Number(search.horizon) as 5 | 15;
     return out;
   },
 });
@@ -261,21 +290,27 @@ const formulaLabSystemRoute = createRoute({
 const legacyPolymarketFormulaLabRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/formula-lab",
-  beforeLoad: () => { throw redirect({ to: "/formula-lab" }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/formula-lab" });
+  },
   component: FormulaLabPage,
 });
 
 const leaderboardRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/leaderboard",
-  beforeLoad: () => { throw redirect({ to: "/analytics" }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/analytics" });
+  },
   component: LeaderboardPage,
 });
 
 const assetsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/assets",
-  beforeLoad: () => { throw redirect({ to: "/analytics" }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/analytics" });
+  },
   component: AssetsPage,
 });
 
@@ -288,7 +323,9 @@ const screensRoute = createRoute({
 const chartsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/charts",
-  beforeLoad: () => { throw redirect({ to: "/analytics" }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/analytics" });
+  },
   component: ChartsPage,
 });
 
@@ -328,7 +365,9 @@ const tradingRoute = createRoute({
 const adminRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/admin",
-  beforeLoad: () => { throw redirect({ to: "/settings" }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/settings" });
+  },
   component: AdminPage,
 });
 
@@ -336,7 +375,39 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   forgotPasswordRoute,
   resetPasswordRoute,
-  protectedRoute.addChildren([indexRoute, dashboardRoute, notesRoute, catalogRoute, strategyDetailRoute, sweepsRoute, sweepsHistoryRoute, sweepDetailRoute, analyticsRoute, tesseractRoute, knowledgeRoute, polymarketRoute, polymarketStrategyRoute, polymarketAssetRoute, formulaLabRoute, formulaLabFormulasRoute, formulaLabExperimentsRoute, formulaLabSystemRoute, legacyPolymarketFormulaLabRoute, crucibleRoute, resultsRoute, leaderboardRoute, assetsRoute, screensRoute, chartsRoute, liveRoute, portfolioRoute, positionsRoute, tradingRoute, settingsRoute, adminRoute]),
+  protectedRoute.addChildren([
+    indexRoute,
+    dashboardRoute,
+    notesRoute,
+    catalogRoute,
+    strategyDetailRoute,
+    sweepsRoute,
+    sweepsHistoryRoute,
+    sweepDetailRoute,
+    analyticsRoute,
+    tesseractRoute,
+    knowledgeRoute,
+    polymarketRoute,
+    polymarketStrategyRoute,
+    polymarketAssetRoute,
+    formulaLabRoute,
+    formulaLabFormulasRoute,
+    formulaLabExperimentsRoute,
+    formulaLabSystemRoute,
+    legacyPolymarketFormulaLabRoute,
+    crucibleRoute,
+    resultsRoute,
+    leaderboardRoute,
+    assetsRoute,
+    screensRoute,
+    chartsRoute,
+    liveRoute,
+    portfolioRoute,
+    positionsRoute,
+    tradingRoute,
+    settingsRoute,
+    adminRoute,
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });

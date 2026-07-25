@@ -25,14 +25,14 @@ type LedgerBot = { key: string; name: string; color: string };
 type RangeKey = "7" | "14" | "30" | "all";
 type TimeframeKey = "combined" | "5" | "15";
 
-const usd = (value: number) =>
-  `${value < 0 ? "-" : "+"}$${Math.abs(value).toFixed(2)}`;
+const usd = (value: number) => `${value < 0 ? "-" : "+"}$${Math.abs(value).toFixed(2)}`;
 
 const parseDay = (key: string) => new Date(`${key}T12:00:00`);
 
 /** Calendar-date arithmetic intentionally runs at UTC noon so DST cannot skip or duplicate a key. */
 export function inclusiveDayKeys(first: string, last: string): string[] {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(first) || !/^\d{4}-\d{2}-\d{2}$/.test(last) || first > last) return [];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(first) || !/^\d{4}-\d{2}-\d{2}$/.test(last) || first > last)
+    return [];
   const start = new Date(`${first}T12:00:00Z`);
   const end = new Date(`${last}T12:00:00Z`);
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return [];
@@ -50,6 +50,8 @@ export function PolymarketDailyRawLedger({
   subtitle = "realized P&L by Chicago calendar day",
   horizonMin,
   assets,
+  stakeScale = 1,
+  stakeUsd,
 }: {
   ledger: DailyRawLedger;
   bots: LedgerBot[];
@@ -57,12 +59,14 @@ export function PolymarketDailyRawLedger({
   subtitle?: string;
   horizonMin?: 5 | 15;
   assets?: readonly string[];
+  stakeScale?: number;
+  stakeUsd?: 5 | 10 | 20;
 }) {
   const [range, setRange] = useState<RangeKey>(() => {
     const saved = localStorage.getItem("floor.dailyRawRange") as RangeKey | null;
     return saved && ["7", "14", "30", "all"].includes(saved)
       ? saved
-      : String(ledger.defaultVisibleDays) as RangeKey;
+      : (String(ledger.defaultVisibleDays) as RangeKey);
   });
   const [sort, setSort] = useState<SortState<string>>({
     key: "range",
@@ -80,23 +84,24 @@ export function PolymarketDailyRawLedger({
     setTimeframe(next);
     localStorage.setItem("floor.dailyRawTimeframe", next);
   };
-  const effectiveHorizonMin = horizonMin
-    ?? (timeframe === "combined" ? null : Number(timeframe) as 5 | 15);
+  const effectiveHorizonMin =
+    horizonMin ?? (timeframe === "combined" ? null : (Number(timeframe) as 5 | 15));
 
   const filteredRows = useMemo(
-    () => ledger.rows.filter((row) =>
-      (effectiveHorizonMin == null || row.horizonMin === effectiveHorizonMin)
-      && (assets == null || assets.includes(row.pair.replace("-USD", "")))
-    ),
+    () =>
+      ledger.rows.filter(
+        (row) =>
+          (effectiveHorizonMin == null || row.horizonMin === effectiveHorizonMin) &&
+          (assets == null || assets.includes(row.pair.replace("-USD", ""))),
+      ),
     [assets, effectiveHorizonMin, ledger.rows],
   );
   const allDays = useMemo(() => {
     const observed = filteredRows.map((row) => row.day).sort();
     const first = observed[0] ?? ledger.currentDay;
-    const last = [observed[observed.length - 1], ledger.currentDay]
-      .filter(Boolean)
-      .sort()
-      .at(-1) ?? ledger.currentDay;
+    const last =
+      [observed[observed.length - 1], ledger.currentDay].filter(Boolean).sort().at(-1) ??
+      ledger.currentDay;
     return inclusiveDayKeys(first, last);
   }, [filteredRows, ledger.currentDay]);
   const days = range === "all" ? allDays : allDays.slice(-Number(range));
@@ -105,7 +110,7 @@ export function PolymarketDailyRawLedger({
     const key = `${row.botKey}|${row.day}`;
     const current = cellByKey.get(key) ?? { botKey: row.botKey, day: row.day, n: 0, raw: 0 };
     current.n += row.n;
-    current.raw += row.raw;
+    current.raw += row.raw * stakeScale;
     cellByKey.set(key, current);
   }
   const activeBots = bots.filter((bot) => filteredRows.some((row) => row.botKey === bot.key));
@@ -121,11 +126,12 @@ export function PolymarketDailyRawLedger({
   });
   const sortedBotRows = stableSortRows(
     botRows,
-    (row) => sort.key === "strategy"
-      ? row.bot.name
-      : sort.key === "range"
-        ? row.rangeRaw
-        : row.cells[days.indexOf(sort.key)]?.raw,
+    (row) =>
+      sort.key === "strategy"
+        ? row.bot.name
+        : sort.key === "range"
+          ? row.rangeRaw
+          : row.cells[days.indexOf(sort.key)]?.raw,
     sort.direction,
   );
   const sortRows = (key: string, initialDirection: "asc" | "desc" = "desc") =>
@@ -138,9 +144,7 @@ export function PolymarketDailyRawLedger({
   const singleMaxAbs = Math.max(0.01, ...singleSeries.map(({ row }) => Math.abs(row?.raw ?? 0)));
   const singleSummary = singleBot
     ? summarizeDailyRawRows(
-        singleSeries.flatMap(({ day, row }) => row
-          ? [{ day, n: row.n, raw: row.raw }]
-          : []),
+        singleSeries.flatMap(({ day, row }) => (row ? [{ day, n: row.n, raw: row.raw }] : [])),
         ledger.currentDay,
       )
     : null;
@@ -151,51 +155,62 @@ export function PolymarketDailyRawLedger({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <CalendarDays className="text-muted-foreground h-4 w-4" />
               {title}
-              <span className="text-xs font-normal text-muted-foreground">{subtitle}</span>
+              <span className="text-muted-foreground text-xs font-normal">{subtitle}</span>
             </CardTitle>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-[11px]">
               {ledger.timeZone} · attributed when the market is graded · selected Paper Floor scope
               {effectiveHorizonMin ? ` · ${effectiveHorizonMin}m only` : " · 5m + 15m"}
               {assets ? ` · ${assets.join(", ")}` : ""}
+              {stakeUsd
+                ? ` · $${stakeUsd} ${stakeUsd === 5 ? "captured stake" : "linear stake model"}`
+                : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {horizonMin == null ? (
               <div
-                className="flex rounded-md border bg-muted/10 p-0.5 text-xs"
+                className="bg-muted/10 flex rounded-md border p-0.5 text-xs"
                 aria-label="Daily RAW timeframe"
               >
-                {([
-                  ["combined", "5m + 15m"],
-                  ["5", "5m"],
-                  ["15", "15m"],
-                ] as const).map(([key, label]) => (
+                {(
+                  [
+                    ["combined", "5m + 15m"],
+                    ["5", "5m"],
+                    ["15", "15m"],
+                  ] as const
+                ).map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => chooseTimeframe(key)}
                     aria-pressed={timeframe === key}
-                    className={"rounded px-2 py-1 transition-colors " + (timeframe === key
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:text-foreground")}
+                    className={
+                      "rounded px-2 py-1 transition-colors " +
+                      (timeframe === key
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground")
+                    }
                   >
                     {label}
                   </button>
                 ))}
               </div>
             ) : null}
-            <div className="flex rounded-md border bg-muted/10 p-0.5 text-xs">
+            <div className="bg-muted/10 flex rounded-md border p-0.5 text-xs">
               {(["7", "14", "30", "all"] as const).map((key) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => chooseRange(key)}
                   aria-pressed={range === key}
-                  className={"rounded px-2 py-1 transition-colors " + (range === key
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground")}
+                  className={
+                    "rounded px-2 py-1 transition-colors " +
+                    (range === key
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground")
+                  }
                 >
                   {key === "all" ? "All" : `${key}D`}
                 </button>
@@ -215,16 +230,24 @@ export function PolymarketDailyRawLedger({
               />
               <DailyMetric
                 label="Positive days"
-                value={singleSummary.completedDays
-                  ? `${singleSummary.positiveCompletedDays}/${singleSummary.completedDays}`
-                  : "—"}
-                sub={singleSummary.completedDays
-                  ? `${singleSummary.negativeCompletedDays} negative · ${singleSummary.flatCompletedDays} flat`
-                  : "waiting for a completed day"}
+                value={
+                  singleSummary.completedDays
+                    ? `${singleSummary.positiveCompletedDays}/${singleSummary.completedDays}`
+                    : "—"
+                }
+                sub={
+                  singleSummary.completedDays
+                    ? `${singleSummary.negativeCompletedDays} negative · ${singleSummary.flatCompletedDays} flat`
+                    : "waiting for a completed day"
+                }
               />
               <DailyMetric
                 label="Median day"
-                value={singleSummary.medianCompletedRaw == null ? "—" : usd(singleSummary.medianCompletedRaw)}
+                value={
+                  singleSummary.medianCompletedRaw == null
+                    ? "—"
+                    : usd(singleSummary.medianCompletedRaw)
+                }
                 tone={singleSummary.medianCompletedRaw}
                 sub="completed days only"
               />
@@ -244,30 +267,38 @@ export function PolymarketDailyRawLedger({
                 label="Today · live"
                 value={singleSummary.current ? usd(singleSummary.current.raw) : "—"}
                 tone={singleSummary.current?.raw}
-                sub={singleSummary.current
-                  ? `${singleSummary.current.n} graded so far`
-                  : "no grades yet"}
+                sub={
+                  singleSummary.current
+                    ? `${singleSummary.current.n} graded so far`
+                    : "no grades yet"
+                }
               />
             </div>
-            <div className="relative h-44 overflow-hidden rounded-md border bg-muted/10">
+            <div className="bg-muted/10 relative h-44 overflow-hidden rounded-md border">
               <div className="absolute inset-x-0 top-1/2 border-t border-dashed" />
               <div className="absolute inset-0 flex items-stretch gap-1 px-3">
                 {singleSeries.map(({ day, row }) => {
                   const value = row?.raw ?? 0;
-                  const height = `${Math.max(value === 0 ? 1 : 3, Math.abs(value) / singleMaxAbs * 46)}%`;
+                  const height = `${Math.max(value === 0 ? 1 : 3, (Math.abs(value) / singleMaxAbs) * 46)}%`;
                   return (
                     <div key={day} className="group relative flex min-w-8 flex-1">
                       <div
-                        className={"absolute left-[15%] right-[15%] rounded-sm " + (value > 0
-                          ? "bottom-1/2 bg-success/70"
-                          : value < 0
-                            ? "top-1/2 bg-destructive/70"
-                            : "bottom-1/2 bg-muted-foreground/25")}
+                        className={
+                          "absolute left-[15%] right-[15%] rounded-sm " +
+                          (value > 0
+                            ? "bg-success/70 bottom-1/2"
+                            : value < 0
+                              ? "bg-destructive/70 top-1/2"
+                              : "bg-muted-foreground/25 bottom-1/2")
+                        }
                         style={{ height }}
                         title={`${day}: ${row ? `${usd(value)} · ${row.n} graded` : "no grades"}`}
                       />
-                      <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                        {parseDay(day).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}
+                      <span className="text-muted-foreground absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] opacity-0 transition-opacity group-hover:opacity-100">
+                        {parseDay(day).toLocaleDateString(undefined, {
+                          month: "numeric",
+                          day: "numeric",
+                        })}
                       </span>
                     </div>
                   );
@@ -278,23 +309,56 @@ export function PolymarketDailyRawLedger({
         )}
         <div className="max-h-[34rem] overflow-auto">
           <table className="min-w-full text-xs tabular-nums">
-            <thead className="sticky top-0 z-20 border-b bg-card text-[10px] uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-card text-muted-foreground sticky top-0 z-20 border-b text-[10px] uppercase tracking-wider">
               <tr>
-                <PolymarketSortableHeader column="strategy" active={sort.key} direction={sort.direction} onSort={sortRows} initialDirection="asc" className="sticky left-0 z-30 min-w-56 bg-card px-4 py-2 font-medium">Strategy</PolymarketSortableHeader>
+                <PolymarketSortableHeader
+                  column="strategy"
+                  active={sort.key}
+                  direction={sort.direction}
+                  onSort={sortRows}
+                  initialDirection="asc"
+                  className="bg-card sticky left-0 z-30 min-w-56 px-4 py-2 font-medium"
+                >
+                  Strategy
+                </PolymarketSortableHeader>
                 {days.map((day) => (
-                  <PolymarketSortableHeader key={day} column={day} active={sort.key} direction={sort.direction} onSort={sortRows} align="right" className="min-w-24 px-3 py-2 font-medium">
-                    {parseDay(day).toLocaleDateString(undefined, { weekday: "short", month: "numeric", day: "numeric" })}
+                  <PolymarketSortableHeader
+                    key={day}
+                    column={day}
+                    active={sort.key}
+                    direction={sort.direction}
+                    onSort={sortRows}
+                    align="right"
+                    className="min-w-24 px-3 py-2 font-medium"
+                  >
+                    {parseDay(day).toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "numeric",
+                      day: "numeric",
+                    })}
                   </PolymarketSortableHeader>
                 ))}
-                <PolymarketSortableHeader column="range" active={sort.key} direction={sort.direction} onSort={sortRows} align="right" className="min-w-24 px-4 py-2 font-medium">Range</PolymarketSortableHeader>
+                <PolymarketSortableHeader
+                  column="range"
+                  active={sort.key}
+                  direction={sort.direction}
+                  onSort={sortRows}
+                  align="right"
+                  className="min-w-24 px-4 py-2 font-medium"
+                >
+                  Range
+                </PolymarketSortableHeader>
               </tr>
             </thead>
             <tbody>
               {sortedBotRows.map(({ bot, cells, rangeRaw, rangeN }) => {
                 return (
                   <tr key={bot.key} className="border-b last:border-0">
-                    <td className="sticky left-0 z-10 bg-card px-4 py-2.5 font-medium">
-                      <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ background: bot.color }} />
+                    <td className="bg-card sticky left-0 z-10 px-4 py-2.5 font-medium">
+                      <span
+                        className="mr-2 inline-block h-2 w-2 rounded-full"
+                        style={{ background: bot.color }}
+                      />
                       {bot.name}
                     </td>
                     {cells.map((row, index) => {
@@ -302,24 +366,33 @@ export function PolymarketDailyRawLedger({
                       return (
                         <td
                           key={days[index]}
-                          className={"px-3 py-2.5 text-right " + (!row
-                            ? "text-muted-foreground/35"
-                            : value > 0
-                              ? "bg-success/5 text-success"
-                              : value < 0
-                                ? "bg-destructive/5 text-destructive"
-                                : "text-muted-foreground")}
-                          title={row ? `${usd(value)} from ${row.n} graded trades` : "No trades graded"}
+                          className={
+                            "px-3 py-2.5 text-right " +
+                            (!row
+                              ? "text-muted-foreground/35"
+                              : value > 0
+                                ? "bg-success/5 text-success"
+                                : value < 0
+                                  ? "bg-destructive/5 text-destructive"
+                                  : "text-muted-foreground")
+                          }
+                          title={
+                            row ? `${usd(value)} from ${row.n} graded trades` : "No trades graded"
+                          }
                         >
                           {row ? `${value < 0 ? "-" : "+"}$${Math.abs(value).toFixed(0)}` : "—"}
                         </td>
                       );
                     })}
-                    <td className={"px-4 py-2.5 text-right font-semibold " + (rangeRaw > 0
-                      ? "text-success"
-                      : rangeRaw < 0
-                        ? "text-destructive"
-                        : "text-muted-foreground")}
+                    <td
+                      className={
+                        "px-4 py-2.5 text-right font-semibold " +
+                        (rangeRaw > 0
+                          ? "text-success"
+                          : rangeRaw < 0
+                            ? "text-destructive"
+                            : "text-muted-foreground")
+                      }
                       title={`${rangeN} graded trades in the selected range`}
                     >
                       {rangeN ? usd(rangeRaw) : "—"}
@@ -328,12 +401,16 @@ export function PolymarketDailyRawLedger({
                 );
               })}
               {!visibleBots.length && (
-                <tr><td colSpan={days.length + 2} className="p-8 text-center text-muted-foreground">No graded daily ledger rows in this scope.</td></tr>
+                <tr>
+                  <td colSpan={days.length + 2} className="text-muted-foreground p-8 text-center">
+                    No graded daily ledger rows in this scope.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
-        <p className="border-t px-4 py-2 text-[11px] text-muted-foreground">
+        <p className="text-muted-foreground border-t px-4 py-2 text-[11px]">
           A blank cell means no trade was graded that day. Strategies are intentionally not summed
           into a portfolio total because many make overlapping or mirrored decisions. Completed-day
           summaries are descriptive only, exclude the still-live Chicago day, and have no verdict
@@ -357,19 +434,25 @@ function DailyMetric({
   tone?: number | null;
 }) {
   return (
-    <div className="rounded-md border bg-muted/10 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={"mt-1 text-sm font-semibold tabular-nums " + (tone == null
-        ? ""
-        : tone > 0
-          ? "text-success"
-          : tone < 0
-            ? "text-destructive"
-            : "text-muted-foreground")}
+    <div className="bg-muted/10 rounded-md border px-3 py-2">
+      <div className="text-muted-foreground text-[10px] uppercase tracking-wider">{label}</div>
+      <div
+        className={
+          "mt-1 text-sm font-semibold tabular-nums " +
+          (tone == null
+            ? ""
+            : tone > 0
+              ? "text-success"
+              : tone < 0
+                ? "text-destructive"
+                : "text-muted-foreground")
+        }
       >
         {value}
       </div>
-      <div className="mt-0.5 truncate text-[10px] text-muted-foreground" title={sub}>{sub}</div>
+      <div className="text-muted-foreground mt-0.5 truncate text-[10px]" title={sub}>
+        {sub}
+      </div>
     </div>
   );
 }

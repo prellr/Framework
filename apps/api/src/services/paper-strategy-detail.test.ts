@@ -2,18 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const apiRouter = readFileSync(
-  new URL("../routers/polymarket.ts", import.meta.url),
-  "utf8",
-);
-const floorSource = readFileSync(
-  new URL("./paper-floor.ts", import.meta.url),
-  "utf8",
-);
-const webRouter = readFileSync(
-  new URL("../../../web/src/router.tsx", import.meta.url),
-  "utf8",
-);
+const apiRouter = readFileSync(new URL("../routers/polymarket.ts", import.meta.url), "utf8");
+const floorSource = readFileSync(new URL("./paper-floor.ts", import.meta.url), "utf8");
+const webRouter = readFileSync(new URL("../../../web/src/router.tsx", import.meta.url), "utf8");
 const detailPage = readFileSync(
   new URL("../../../web/src/pages/polymarket/PolymarketStrategyDetailPage.tsx", import.meta.url),
   "utf8",
@@ -49,6 +40,13 @@ test("every paper strategy has a routeable evidence-only detail surface", () => 
   assert.match(detailPage, /assets:\s*selectedAssetQuery/);
   assert.match(detailPage, /assets=\{selectedAssets\}/);
   assert.match(dailyRawPage, /row\.pair\.replace\("-USD", ""\)/);
+  assert.match(detailPage, /label="Stake model"/);
+  assert.match(detailPage, /STAKE_OPTIONS/);
+  assert.match(detailPage, /const STAKE_OPTIONS: readonly StakeUsd\[\] = \[5, 10, 20\]/);
+  assert.match(detailPage, /value === CAPTURED_STAKE_USD \? " captured" : " linear"/);
+  assert.match(detailPage, /does not replay deeper book liquidity/);
+  assert.match(webRouter, /stake\?: 5 \| 10 \| 20/);
+  assert.match(dailyRawPage, /current\.raw \+= row\.raw \* stakeScale/);
 });
 
 test("strategy detail data remains bounded, read-only, and paper-only", () => {
@@ -59,6 +57,7 @@ test("strategy detail data remains bounded, read-only, and paper-only", () => {
   assert.match(floorSource, /paperStrategyFeed/);
   assert.match(detailPage, /paper only · live locked/);
   assert.match(detailPage, /Execution" value="Locked; no route exists"/);
+  assert.match(detailPage, /cannot affect the frozen \$5 verdict gate/);
   assert.doesNotMatch(detailPage, /placeOrder|createOrder|walletPrivateKey|privateKey/);
 });
 
@@ -97,10 +96,7 @@ test("strategy registry column titles describe their forward-evidence denominato
 });
 
 test("daily RAW evidence uses grade-time Chicago days and never claims portfolio additivity", () => {
-  const dailyLedger = readFileSync(
-    new URL("./paper-daily-ledger.ts", import.meta.url),
-    "utf8",
-  );
+  const dailyLedger = readFileSync(new URL("./paper-daily-ledger.ts", import.meta.url), "utf8");
   const dailyView = readFileSync(
     new URL("../../../web/src/pages/polymarket/PolymarketDailyRawLedger.tsx", import.meta.url),
     "utf8",
