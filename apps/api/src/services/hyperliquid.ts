@@ -17,27 +17,143 @@ const READ_ONLY_TYPES = new Set(["portfolio", "clearinghouseState", "userFills",
 export const hyperliquidInfoTypeAllowed = (type: unknown): type is string =>
   typeof type === "string" && READ_ONLY_TYPES.has(type);
 
+const CANDLE_INTERVALS = new Set([
+  "1m",
+  "3m",
+  "5m",
+  "15m",
+  "30m",
+  "1h",
+  "2h",
+  "4h",
+  "8h",
+  "12h",
+  "1d",
+  "3d",
+  "1w",
+  "1M",
+]);
+
+export interface HlCandle {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+/** Complete public candle payload returned by Hyperliquid's read-only candleSnapshot query. */
+export interface HlCandleSnapshot extends HlCandle {
+  T: number;
+  s: string;
+  i: string;
+  n: number;
+}
+
+export interface HlCandleSnapshotResult {
+  candles: HlCandleSnapshot[];
+  rawCandles: unknown[];
+  receivedAtMs: number;
+}
+
+/**
+ * Bounded historical candle snapshot. This is intentionally a single public `/info` request:
+ * callers cannot supply an endpoint or query type and the client has no exchange/order path.
+ */
+export async function getCandleSnapshot(input: {
+  coin: string;
+  interval: string;
+  startTime: number;
+  endTime: number;
+  fetcher?: typeof fetch;
+}): Promise<HlCandleSnapshotResult> {
+  const coin = input.coin.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(coin)) {
+    throw new Error("Invalid Hyperliquid candle coin");
+  }
+  if (!CANDLE_INTERVALS.has(input.interval)) {
+    throw new Error(`Unsupported Hyperliquid candle interval "${input.interval}"`);
+  }
+  if (
+    !Number.isSafeInteger(input.startTime)
+    || !Number.isSafeInteger(input.endTime)
+    || input.startTime < 0
+    || input.endTime <= input.startTime
+  ) {
+    throw new Error("Invalid Hyperliquid candle time range");
+  }
+  const raw = await hlInfo(
+    {
+      type: "candleSnapshot",
+      req: {
+        coin,
+        interval: input.interval,
+        startTime: input.startTime,
+        endTime: input.endTime,
+      },
+    },
+    input.fetcher,
+  );
+  const receivedAtMs = Date.now();
+  if (!Array.isArray(raw)) {
+    throw new Error("Hyperliquid candleSnapshot returned a non-array payload");
+  }
+  const candles = raw.map((value, index) => {
+    const row = value as Record<string, unknown>;
+    const candle: HlCandleSnapshot = {
+      t: Number(row.t),
+      T: Number(row.T),
+      s: String(row.s ?? ""),
+      i: String(row.i ?? ""),
+      o: Number(row.o),
+      h: Number(row.h),
+      l: Number(row.l),
+      c: Number(row.c),
+      v: Number(row.v),
+      n: Number(row.n),
+    };
+    if (
+      !Number.isSafeInteger(candle.t)
+      || !Number.isSafeInteger(candle.T)
+      || !Number.isSafeInteger(candle.n)
+      || ![candle.o, candle.h, candle.l, candle.c, candle.v].every(Number.isFinite)
+    ) {
+      throw new Error(`Hyperliquid candleSnapshot row ${index} is malformed`);
+    }
+    return candle;
+  });
+  return {
+    candles: candles.sort((a, b) => a.t - b.t),
+    rawCandles: raw,
+    receivedAtMs,
+  };
+}
+
 /** Recent 1m candles for a coin (read-only OHLCV) — the pricer bot's vol/strike source. */
-export interface HlCandle { t: number; o: number; h: number; l: number; c: number; v: number }
 export async function getRecentCandles(coin: string, intervalMin = 1, bars = 240): Promise<HlCandle[]> {
   const now = Date.now();
-  const raw = await hlInfo({
-    type: "candleSnapshot",
-    req: { coin, interval: `${intervalMin}m`, startTime: now - bars * intervalMin * 60_000, endTime: now },
+  const result = await getCandleSnapshot({
+    coin,
+    interval: `${intervalMin}m`,
+    startTime: now - bars * intervalMin * 60_000,
+    endTime: now,
   });
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((k: any) => ({ t: Number(k.t), o: parseFloat(k.o), h: parseFloat(k.h), l: parseFloat(k.l), c: parseFloat(k.c), v: parseFloat(k.v) }))
+  return result.candles
+    .map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }))
     .filter((k) => Number.isFinite(k.c) && k.c > 0)
     .sort((a, b) => a.t - b.t);
 }
 
-async function hlInfo(body: Record<string, unknown>): Promise<any> {
+async function hlInfo(
+  body: Record<string, unknown>,
+  fetcher: typeof fetch = fetch,
+): Promise<any> {
   const type = body.type;
   if (!hyperliquidInfoTypeAllowed(type)) {
     throw new Error(`Hyperliquid info type "${String(type)}" is not allowed (read-only only)`);
   }
-  const res = await fetch(HYPERLIQUID_INFO_ENDPOINT, {
+  const res = await fetcher(HYPERLIQUID_INFO_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
