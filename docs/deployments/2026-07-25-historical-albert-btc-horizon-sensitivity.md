@@ -51,3 +51,25 @@ gate, starts Crucible, signs an order, or enables execution.
   chronological purging, and future-data mutation protection.
 - Formula Lab exposes all 21 requested horizon × trial rows in a sortable table.
 - The complete matrix and limitations are recorded in the in-app knowledge base.
+
+## Production deployment
+
+- Source commit: `289e178` (`feat(formula-lab): add Albert horizon sensitivity`)
+- Deployed: `2026-07-25T16:00Z`
+- Host/project: `server2.local` · `/Users/admin/jester-analytics`
+- Recovery point: `/Users/admin/jester-releases/20260725T155827Z`
+- Pre-deploy source archive:
+  `sha256:cea8bc92cd09ac8a9d1dbc787626f754c0a6ddad79130b845832ad92edf51f7a`
+- Pre-deploy database dump:
+  `sha256:3e479dd024c68f8ddc0c20f52a80b27b4a0c27821389c88e46b89c6dbd1716c2`
+- API image:
+  `sha256:e6d3208b3c0d411ddcf8b2d446a2d018999b6f6a317680647679f09bec10eb56`
+- Nginx image:
+  `sha256:1381ddde1cdd95cc933578334a00efc611f04eaddbaa80c985377ba033b67e7a`
+- Knowledge slug:
+  `alchemy-historical-albert-btc-5m-horizon-sensitivity-research-v1`
+- Knowledge row count: `1`; matching audit row count: `1`
+- Public health: `{"status":"ok"}`
+- Browser verification: both the immutable 10m baseline and the new 30m/1h/4h section render;
+  the expanded section contains all 21 declared rows and produced no console warnings or errors.
+- Worker remained on its existing image and was not restarted.
