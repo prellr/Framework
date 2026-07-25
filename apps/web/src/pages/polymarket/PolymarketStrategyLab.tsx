@@ -234,6 +234,10 @@ export function PolymarketStrategyLab() {
     refetchInterval: 60_000,
   });
   const micro = trpc.polymarket.microstructureTape.useQuery(undefined, { staleTime: 60_000 });
+  const multiStakeCapacity = trpc.polymarket.multiStakeCapacityTape.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
   const venue = trpc.polymarket.venueLeadLagTape.useQuery(undefined, {
     staleTime: 15 * 60_000,
     refetchInterval: 15 * 60_000,
@@ -294,6 +298,7 @@ export function PolymarketStrategyLab() {
   });
   const auditRegistrySettled = ![
     micro.isLoading,
+    multiStakeCapacity.isLoading,
     venue.isLoading,
     basisDistribution.isLoading,
     idNr4Quality.isLoading,
@@ -345,6 +350,7 @@ export function PolymarketStrategyLab() {
     const rows: AuditView[] = [];
     const failed = [
       { key: "microstructure", error: micro.isError },
+      { key: "multiStakeCapacity", error: multiStakeCapacity.isError },
       { key: "venue", error: venue.isError },
       { key: "basisDistribution", error: basisDistribution.isError },
       { key: "idNr4Quality", error: idNr4Quality.isError },
@@ -383,6 +389,27 @@ export function PolymarketStrategyLab() {
         secondary: `${d.usableRows.toLocaleString()} usable rows · ${d.spanDays.toFixed(2)} / ${d.minSpanDays}d`,
         evalStartMs: d.evalStartMs,
         note: "Captures touch size, depth, microprice, imbalance, spread, and Chainlink state without exposing outcome-conditioned diagnostics early.",
+      });
+    }
+    if (multiStakeCapacity.data) {
+      const d = multiStakeCapacity.data;
+      rows.push({
+        key: "multi-stake-capacity",
+        name: "$5 / $10 / $20 same-book capacity",
+        family: "Execution model",
+        version: d.version,
+        source: "Existing Polymarket UP / DOWN book snapshots",
+        state: readiness(d.readyForCapacityDistribution, d.evalStartMs),
+        progress: progress(
+          ratio(d.markets, d.minMarkets),
+          ratio(d.spanDays, d.minSpanDays),
+          ratio(d.minBucketMarkets, d.minMarketsPerAssetTimeframe),
+          ratio(d.coverage, d.minCoverage),
+        ),
+        primary: `${d.markets.toLocaleString()} / ${d.minMarkets.toLocaleString()} markets · ${(d.coverage * 100).toFixed(1)}% / ${(d.minCoverage * 100).toFixed(0)}% paired coverage`,
+        secondary: `${d.minBucketMarkets.toLocaleString()} / ${d.minMarketsPerAssetTimeframe.toLocaleString()} weakest bucket markets · ${d.spanDays.toFixed(2)} / ${d.minSpanDays}d`,
+        evalStartMs: d.evalStartMs,
+        note: "Captures fee-adjusted $10 and $20 VWAP capacity from the same two public books already fetched for each $5 paper decision. It adds no request, socket, strategy, verdict input, or execution path. Higher-stake UI results remain linear until a separate frozen review is complete.",
       });
     }
     if (venue.data) {
@@ -883,6 +910,7 @@ export function PolymarketStrategyLab() {
     deribit,
     markout,
     micro,
+    multiStakeCapacity,
     profile,
     streak,
     tradeFlow,

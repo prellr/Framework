@@ -130,6 +130,10 @@ export function PolymarketStrategyDetailPage() {
       refetchInterval: 60_000,
     },
   );
+  const multiStakeCapacity = trpc.polymarket.multiStakeCapacityTape.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
   const strategyFeed = trpc.polymarket.strategyFeed.useQuery(
     {
       botKey,
@@ -254,6 +258,16 @@ export function PolymarketStrategyDetailPage() {
   ).size;
   const gateSpanDays = selectedGate?.spanDays ?? 0;
   const sliceLabel = period === "all" ? "selected scope" : `${period} slice`;
+  const capacity = multiStakeCapacity.data;
+  const capacityWaiting = capacity != null && Date.now() < capacity.evalStartMs;
+  const capacityProgress =
+    capacity == null
+      ? "Depth calibration status unavailable."
+      : capacityWaiting
+        ? `Same-book $10/$20 depth calibration begins ${new Date(capacity.evalStartMs).toLocaleString()}.`
+        : capacity.readyForCapacityDistribution
+          ? `Same-book depth tape is ready for a separate frozen capacity-distribution review (${capacity.markets.toLocaleString()} markets · ${(capacity.coverage * 100).toFixed(1)}% paired $10/$20 coverage).`
+          : `Same-book $10/$20 depth calibration is collecting: ${capacity.markets.toLocaleString()} / ${capacity.minMarkets.toLocaleString()} markets · ${capacity.spanDays.toFixed(2)} / ${capacity.minSpanDays}d · ${(capacity.coverage * 100).toFixed(1)}% / ${(capacity.minCoverage * 100).toFixed(0)}% paired coverage.`;
 
   return (
     <div className="space-y-5">
@@ -363,6 +377,10 @@ export function PolymarketStrategyDetailPage() {
           {stakeUsd === CAPTURED_STAKE_USD
             ? "Captured model: every decision uses its recorded fee-adjusted $5 book-walk VWAP and binary payout."
             : `$${stakeUsd} linear exposure model: dollar P&L is scaled ${stakeScale.toFixed(0)}× from the recorded $5 fill. It does not replay deeper book liquidity, slippage, or capacity and cannot affect the frozen $5 verdict gate.`}
+          <span className="mt-1 block">
+            {capacityProgress} Until that review is complete, the $10/$20 controls remain explicitly
+            linear and descriptive.
+          </span>
         </div>
       </div>
 

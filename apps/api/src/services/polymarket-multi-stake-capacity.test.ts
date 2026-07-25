@@ -159,3 +159,26 @@ test("schema, protected router, and MCP expose only nullable capacity evidence/s
   assert.match(mcp, /analysis_polymarket_multi_stake_capacity_status/);
   assert.doesNotMatch(router, /multiStakeCapacity(?:Place|Submit|Cancel|Sign|Trade)/);
 });
+
+test("higher-stake UI keeps linear modeling visibly separate from the depth-capacity tape", () => {
+  const detail = readFileSync(
+    new URL(
+      "../../../web/src/pages/polymarket/PolymarketStrategyDetailPage.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const lab = readFileSync(
+    new URL(
+      "../../../web/src/pages/polymarket/PolymarketStrategyLab.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(detail, /multiStakeCapacityTape\.useQuery/);
+  assert.match(detail, /the \$10\/\$20 controls remain explicitly\s+linear and descriptive/);
+  assert.match(lab, /multiStakeCapacityTape\.useQuery/);
+  assert.match(lab, /\$5 \/ \$10 \/ \$20 same-book capacity/);
+  assert.match(lab, /It adds no request, socket, strategy, verdict input, or execution path/);
+});
