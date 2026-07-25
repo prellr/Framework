@@ -86,6 +86,8 @@ ssh admin@192.168.2.17 '
     --exclude=.ruff_cache \
     --exclude=.pytest_cache \
     --exclude=.mypy_cache \
+    --exclude=.turbo \
+    --exclude=.benchmarks \
     --exclude=tmp \
     --exclude=.venv \
     --exclude=__pycache__ \
@@ -106,6 +108,7 @@ rsync -azn --delete --itemize-changes \
   --exclude node_modules --exclude .git --exclude .env \
   --exclude '.codex-*' --exclude backups \
   --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
+  --exclude .turbo --exclude .benchmarks \
   --exclude tmp --exclude .venv --exclude __pycache__ \
   --exclude '*.egg-info' --exclude '*.pyc' --exclude dist \
   ./ admin@192.168.2.17:/Users/admin/jester-analytics/
@@ -116,6 +119,7 @@ rsync -az --delete \
   --exclude node_modules --exclude .git --exclude .env \
   --exclude '.codex-*' --exclude backups \
   --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
+  --exclude .turbo --exclude .benchmarks \
   --exclude tmp --exclude .venv --exclude __pycache__ \
   --exclude '*.egg-info' --exclude '*.pyc' --exclude dist \
   ./ admin@192.168.2.17:/Users/admin/jester-analytics/
@@ -167,6 +171,7 @@ rsync -az --delete \
   --exclude .env --exclude .git --exclude node_modules \
   --exclude '.codex-*' --exclude backups \
   --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
+  --exclude .turbo --exclude .benchmarks \
   --exclude tmp --exclude .venv --exclude __pycache__ \
   --exclude '*.egg-info' --exclude '*.pyc' --exclude dist \
   "$restore_dir/" /Users/admin/jester-analytics/
