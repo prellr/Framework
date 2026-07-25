@@ -427,8 +427,8 @@ export function PolymarketStrategyLab() {
           : `${weakestBlocks.toLocaleString()} / ${d.tape.minimumBlocks.toLocaleString()} blocks · ${weakestSpan.toFixed(2)} / ${d.tape.minimumSpanDays}d`,
         evalStartMs: d.evalStartMs,
         note: d.report
-          ? "The six pair-level reports are outcome-free. No threshold, direction, or strategy follows automatically; immutable cuts and separate future 5m/15m registrations are still required."
-          : "The exact basis, one-second change, five-second sign-persistence, and source-age quantiles are preregistered. Their query cannot run until all six pairs pass the original tape floor; gaps remain null and Server2 caches any eventual report for 15 minutes.",
+          ? "The six pair-level reports are outcome-free. No threshold, direction, or strategy follows automatically; the hashed updown-resolution-source-basis-feature-cuts-v1 artifact and separate future 5m/15m registrations are still required."
+          : "The exact basis, one-second change, five-second sign-persistence, and source-age quantiles are preregistered. Their query cannot run until all six pairs pass the original tape floor; a separate guarded freeze will then create updown-resolution-source-basis-feature-cuts-v1, while gaps remain null and Server2 caches the report for 15 minutes.",
       });
     }
     if (tradeFlow.data) {

@@ -41,6 +41,8 @@
     "audit:flow-external-prior-screen-record": "tsx --env-file=../../.env src/scripts/record-flow-external-prior-screen-2026-07-24.ts",
     "audit:resolution-source-basis-research-record": "tsx --env-file=../../.env src/scripts/record-resolution-source-basis-research.ts",
     "audit:resolution-source-basis-distribution-preregister": "tsx --env-file=../../.env src/scripts/record-resolution-source-basis-distribution-audit.ts",
+    "audit:resolution-source-basis-feature-cut-freeze-preregister": "tsx --env-file=../../.env src/scripts/record-resolution-source-basis-feature-cut-freeze-plan-v1.ts",
+    "audit:resolution-source-basis-feature-cuts-freeze": "tsx --env-file=../../.env src/scripts/freeze-resolution-source-basis-feature-cuts-v1.ts",
     "audit:formulaic-fixed-horizon-lab-record": "tsx --env-file=../../.env src/scripts/record-formulaic-fixed-horizon-lab-poc.ts",
     "audit:formula-lab-research-framework-record": "tsx --env-file=../../.env src/scripts/record-formula-lab-research-framework-v2.ts",
     "audit:flow-mechanism-refinement-record": "tsx --env-file=../../.env src/scripts/record-flow-mechanism-refinement-2026-07-24.ts",

@@ -63,7 +63,7 @@ export const FORMULAIC_FIXED_HORIZON_POC = {
   },
   prerequisitesForLiveData: [
     "ready updown-venue-lead-lag-tape-v1 in all six pairs",
-    "immutable outcome-free resolution-source basis feature cuts",
+    "frozen updown-resolution-source-basis-feature-cuts-v1 artifact",
     "source and receive clock coverage",
     "a separately registered live-data experiment and trial ledger",
   ],
