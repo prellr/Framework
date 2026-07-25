@@ -21,6 +21,9 @@ import {
   authoritativeTakerFlowDistributionAudit,
 } from "../services/authoritative-taker-flow-distribution-audit.ts";
 import { authoritativeTakerPressureDistributionAudit } from "../services/authoritative-taker-pressure-distribution-audit.ts";
+import {
+  clobChainPressureConcordanceAudit,
+} from "../services/clob-chain-pressure-concordance-audit.ts";
 import { smoothPathFunnelStatus } from "../services/smooth-path-funnel-report.ts";
 import { hyperliquidFlowTapeStatus } from "../services/hyperliquid-flow-report.ts";
 import { clobEventOfiTapeStatus } from "../services/clob-event-ofi-report.ts";
@@ -95,6 +98,11 @@ export const polymarketRouter = t.router({
   // Chain-confirmed pressure is a proxy-validation reference, not an assumed live decision input.
   authoritativeTakerPressureDistributionAudit: protectedProcedure.query(() =>
     authoritativeTakerPressureDistributionAudit(),
+  ),
+  // Aggregate mechanism concordance only. Both inherited source gates and a separate matched-panel
+  // count/span/coverage gate must pass before any proxy/reference correlation can be queried.
+  clobChainPressureConcordanceAudit: protectedProcedure.query(() =>
+    clobChainPressureConcordanceAudit(),
   ),
   // Outcome-free basis/change/persistence quantiles. The feature query stays unreachable until all
   // six pairs pass the inherited venue-tape row/span/block floor.

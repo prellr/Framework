@@ -24,6 +24,7 @@
     "audit:authoritative-taker-pressure-distribution-preregister": "tsx --env-file=../../.env src/scripts/record-authoritative-taker-pressure-distribution-audit-v1.ts",
     "audit:authoritative-taker-pressure-feature-cut-freeze-preregister": "tsx --env-file=../../.env src/scripts/record-authoritative-taker-pressure-feature-cut-freeze-plan-v1.ts",
     "audit:authoritative-taker-pressure-feature-cuts-freeze": "tsx --env-file=../../.env src/scripts/freeze-authoritative-taker-pressure-feature-cuts-v1.ts",
+    "audit:clob-chain-pressure-concordance-preregister": "tsx --env-file=../../.env src/scripts/record-clob-chain-pressure-concordance-audit-v1.ts",
     "audit:venue-lead-lag-record-repository-screen": "tsx --env-file=../../.env src/scripts/record-venue-lead-lag-repository-screen.ts",
     "audit:smooth-path-causal-record": "tsx --env-file=../../.env src/scripts/record-smooth-path-causal-v2.ts",
     "audit:smooth-path-quality-record": "tsx --env-file=../../.env src/scripts/record-smooth-path-quality-tape.ts",
