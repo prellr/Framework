@@ -32,6 +32,10 @@ import {
   type SortValue,
 } from "@/pages/polymarket/PolymarketSortableHeader";
 import { FormulaExpressionTree } from "./FormulaExpressionTree";
+import {
+  FormulaCalendarPeriodExplorer,
+  FormulaExperimentExplorer,
+} from "./FormulaExperimentExplorer";
 
 type FormulaLab = RouterOutput["formulaLab"]["status"];
 type VenuePreview = RouterOutput["formulaLab"]["venuePreview"];
@@ -288,6 +292,10 @@ export function FormulaLabPage({ view = "overview" }: { view?: FormulaLabView })
     enabled: view === "overview" || view === "experiments",
   });
   const venuePreview = trpc.formulaLab.venuePreview.useQuery(undefined, {
+    staleTime: Number.POSITIVE_INFINITY,
+    enabled: view === "experiments",
+  });
+  const calendarPeriods = trpc.formulaLab.calendarPeriods.useQuery(undefined, {
     staleTime: Number.POSITIVE_INFINITY,
     enabled: view === "experiments",
   });
@@ -954,6 +962,31 @@ export function FormulaLabPage({ view = "overview" }: { view?: FormulaLabView })
           every attempted formula in the denominator.
         </div>
       </section>
+      ) : null}
+
+      {view === "experiments" ? (
+        <>
+          <FormulaExperimentExplorer
+            data={data}
+            venuePreview={venuePreview.data}
+          />
+          {calendarPeriods.data ? (
+            <FormulaCalendarPeriodExplorer data={calendarPeriods.data} />
+          ) : (
+            <section className="rounded-xl border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+              {calendarPeriods.error
+                ? "Calendar backtest receipt could not be loaded."
+                : "Loading calendar backtest receipt..."}
+            </section>
+          )}
+          <div className="flex items-center gap-3 pt-2">
+            <div className="h-px flex-1 bg-border" />
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Archived source receipts
+            </div>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+        </>
       ) : null}
 
       {view === "experiments" ? (

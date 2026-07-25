@@ -103,7 +103,7 @@ type Moments = {
   std: number;
 };
 
-type TrialObservation = {
+export type HistoricalFormulaTrialObservation = {
   id: string;
   entryAtMs: number;
   exitAtMs: number;
@@ -160,6 +160,11 @@ export type HistoricalFormulaTrialResult = {
     | "profitFactor"
     | "riskBreaches"
   >;
+  /**
+   * Optional chronological out-of-sample trade ledger. Ordinary receipts omit it so their
+   * content hashes stay stable. Offline period-analysis scripts may opt in.
+   */
+  observations?: HistoricalFormulaTrialObservation[];
 };
 
 export type HistoricalFormulaReplayResult = {
@@ -319,7 +324,7 @@ function median(values: number[]): number | null {
     : (ordered[middle - 1]! + ordered[middle]!) / 2;
 }
 
-function metrics(observations: TrialObservation[]): TrialMetrics {
+function metrics(observations: HistoricalFormulaTrialObservation[]): TrialMetrics {
   if (!observations.length) {
     return {
       trades: 0,
@@ -470,8 +475,8 @@ function observationsFor(
   trial: HistoricalFormulaTrial,
   outputStats: Moments,
   firstEligibleEntryAtMs = Number.NEGATIVE_INFINITY,
-): TrialObservation[] {
-  const observations: TrialObservation[] = [];
+): HistoricalFormulaTrialObservation[] {
+  const observations: HistoricalFormulaTrialObservation[] = [];
   let nextEligibleEntryAtMs = firstEligibleEntryAtMs;
   for (const point of points) {
     if (point.entryAtMs < nextEligibleEntryAtMs) continue;
@@ -489,7 +494,7 @@ function observationsFor(
   return observations;
 }
 
-function capitalResult(observations: TrialObservation[], holdMs: number) {
+function capitalResult(observations: HistoricalFormulaTrialObservation[], holdMs: number) {
   const holdMinutes = holdMs / 60_000;
   const trades: FormulaPaperTradeOutcome[] = observations.map((observation) => ({
     id: observation.id,
@@ -617,6 +622,7 @@ export function runHistoricalOhlcvFormulaReplay(input: {
   rows: CanonicalOhlcvReplayRow[];
   expression: LegacyFormulaNode;
   config: HistoricalFormulaReplayConfig;
+  captureObservations?: boolean;
 }): HistoricalFormulaReplayResult {
   validateConfig(input.config);
   if (!input.rows.length) throw new Error("historical OHLCV formula replay requires rows");
@@ -644,7 +650,7 @@ export function runHistoricalOhlcvFormulaReplay(input: {
 
   const trials = trialFamily(input.config.thresholdZs).map((trial): HistoricalFormulaTrialResult => {
     const folds: HistoricalFormulaFoldResult[] = [];
-    const aggregateObservations: TrialObservation[] = [];
+    const aggregateObservations: HistoricalFormulaTrialObservation[] = [];
     const insufficientFolds: number[] = [];
     for (let fold = 0; fold < input.config.folds; fold += 1) {
       const testStartIndex = firstTestIndex + fold * testPointsPerFold;
@@ -709,6 +715,9 @@ export function runHistoricalOhlcvFormulaReplay(input: {
           : null,
       },
       capital: capitalResult(aggregateObservations, input.config.holdMs),
+      ...(input.captureObservations
+        ? { observations: aggregateObservations }
+        : {}),
     };
   });
 

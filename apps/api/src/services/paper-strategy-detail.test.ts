@@ -117,4 +117,7 @@ test("daily RAW evidence uses grade-time Chicago days and never claims portfolio
     /\(\$\{paperTrades\.gradedAt\}\s+at time zone \$\{PAPER_DAILY_LEDGER\.timeZone\}\)::date/,
   );
   assert.match(dailyView, /Strategies are intentionally not summed/);
+  assert.match(dailyView, /floor\.dailyRawTimeframe/);
+  assert.match(dailyView, /\["combined", "5m \+ 15m"\]/);
+  assert.match(dailyView, /row\.horizonMin === effectiveHorizonMin/);
 });

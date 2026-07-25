@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { FORMULAIC_FIXED_HORIZON_POC } from "./formulaic-fixed-horizon-contract.ts";
 import { formulaLabStatus } from "./formulaic-fixed-horizon-status.ts";
+import {
+  HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT,
+} from "./historical-albert-calendar-period-receipt.ts";
 
 test("Formula Lab status exposes the complete deterministic trial universe", () => {
   const status = formulaLabStatus();
@@ -95,6 +98,30 @@ test("Formula Lab status exposes the complete deterministic trial universe", () 
     status.historicalOneHourChartSensitivity.invariants.enablesExecution,
     false,
   );
+  assert.equal(HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT.experiments.length, 11);
+  assert.equal(
+    HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT.experiments.reduce(
+      (sum, experiment) => sum + experiment.trials.length,
+      0,
+    ),
+    77,
+  );
+  assert.ok(HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT.experiments.every((experiment) =>
+    experiment.trials.every((trial) =>
+      trial.periods.every((period) =>
+        period.trades === period.wins + period.losses))));
+  assert.equal(
+    HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT.grouping,
+    "UTC calendar month",
+  );
+  assert.equal(
+    HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT.invariants.registersStrategy,
+    false,
+  );
+  assert.equal(
+    HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT.invariants.enablesExecution,
+    false,
+  );
 });
 
 test("planted proof passes mechanics while remaining explicitly non-market evidence", () => {
@@ -128,5 +155,25 @@ test("Formula Lab status and router remain static, read-only, and non-executing"
     routerSource,
     /status:\s*protectedProcedure\.query\(\(\)\s*=>\s*formulaLabStatus\(\)\)/,
   );
+  assert.match(
+    routerSource,
+    /calendarPeriods:\s*protectedProcedure\.query/,
+  );
   assert.doesNotMatch(routerSource, /\.(?:mutation|subscription)\s*\(/);
+});
+
+test("Formula Lab experiment archive exposes unified and calendar exploration controls", () => {
+  const source = readFileSync(
+    new URL(
+      "../../../web/src/pages/formula-lab/FormulaExperimentExplorer.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(source, /Unified result explorer/);
+  assert.match(source, /How the four chronological folds work/);
+  assert.match(source, /Calendar backtest explorer/);
+  assert.match(source, /Win rate/);
+  assert.match(source, /Sample note/);
+  assert.match(source, /Time period/);
 });

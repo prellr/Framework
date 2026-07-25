@@ -56,8 +56,8 @@ export const paperFloorQueue = new Queue("paper-floor-tick", { connection });
 // Prospective 30-second execution-quality tape over paper rows. Observational metadata only.
 export const paperMarkoutQueue = new Queue("paper-markout-capture", { connection });
 
-// Jester V1 entry logger: sided entries of the SUBSCRIBED jester_v1_remastered → signal_snapshot
-// (tournament bot #5 — the fade-V1 measured hypothesis). Gate: v1_signal_logger_enabled.
+// Jester V1 entry logger: sided entries of a user-subscribed jester_v1_remastered → signal_snapshot.
+// Its deep tick audits that read-only external state and never subscribes. Gate: v1_signal_logger_enabled.
 export const signalV1LogQueue = new Queue("signal-v1-log", { connection });
 
 // Tesseract Field logger: forward-collect the live microstructure Field + label outcomes (build #1).

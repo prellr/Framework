@@ -35,3 +35,18 @@ test("durable V1 correction propagation is metadata-only and idempotent", () => 
     assert.equal(source.includes(prohibited), false, `${prohibited} must not be read`);
   }
 });
+
+test("V1 subscription source-health record is read-only and preserves the frozen family", () => {
+  const source = readFileSync(
+    new URL("scripts/record-v1-subscription-health.ts", apiRoot),
+    "utf8",
+  );
+  assert.match(source, /Jester V1 is not subscribed/);
+  assert.match(source, /jester_subscription_audit/);
+  assert.match(source, /PAPER_FAMILYWISE_HYPOTHESES/);
+  assert.match(source, /article\.body\.includes\(marker\)/);
+  assert.match(source, /No activation or subscription action was requested or executed/);
+  assert.doesNotMatch(source, /paperTrades|paper_trade|resultNet|pnlUsd|askPaid|controlAskPaid/);
+  assert.doesNotMatch(source, /name:\s*"jester_automation_actions"/);
+  assert.doesNotMatch(source, /jesterTradeCall\(/);
+});

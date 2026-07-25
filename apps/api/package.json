@@ -60,6 +60,7 @@
     "research:replay-tradingview-albert-horizons": "tsx --env-file=../../.env src/scripts/run-tradingview-albert-horizon-sensitivity.ts",
     "research:replay-tradingview-albert-long-horizons": "tsx --env-file=../../.env src/scripts/run-tradingview-albert-long-horizon-sensitivity.ts",
     "research:replay-tradingview-albert-1h-chart": "tsx --env-file=../../.env src/scripts/run-tradingview-albert-one-hour-chart-sensitivity.ts",
+    "research:replay-tradingview-albert-calendar-periods": "tsx --env-file=../../.env src/scripts/run-tradingview-albert-calendar-periods.ts",
     "audit:historical-albert-replay-record": "tsx --env-file=../../.env src/scripts/record-historical-albert-replay.ts",
     "audit:historical-albert-horizon-sensitivity-record": "tsx --env-file=../../.env src/scripts/record-historical-albert-horizon-sensitivity.ts",
     "audit:historical-albert-long-horizon-sensitivity-record": "tsx --env-file=../../.env src/scripts/record-historical-albert-long-horizon-sensitivity.ts",
@@ -104,6 +105,7 @@
     "audit:paper-daily-raw-evidence-record": "tsx --env-file=../../.env src/scripts/record-paper-daily-raw-evidence-v2.ts",
     "audit:paper-profit-stress-record": "tsx --env-file=../../.env src/scripts/record-paper-profit-stress-semantics-v1.ts",
     "audit:v1-baseline-correction-propagate": "tsx --env-file=../../.env src/scripts/record-v1-baseline-correction-propagation.ts",
+    "audit:v1-subscription-health-record": "tsx --env-file=../../.env src/scripts/record-v1-subscription-health.ts",
     "create-first-user": "tsx --env-file=../../.env scripts/create-first-user.ts",
     "type-check": "tsc --noEmit",
     "test": "tsx --test src/services/*.test.ts"

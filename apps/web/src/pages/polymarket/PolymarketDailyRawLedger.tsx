@@ -23,6 +23,7 @@ export type DailyRawLedger = {
 
 type LedgerBot = { key: string; name: string; color: string };
 type RangeKey = "7" | "14" | "30" | "all";
+type TimeframeKey = "combined" | "5" | "15";
 
 const usd = (value: number) =>
   `${value < 0 ? "-" : "+"}$${Math.abs(value).toFixed(2)}`;
@@ -67,17 +68,27 @@ export function PolymarketDailyRawLedger({
     key: "range",
     direction: "desc",
   });
+  const [timeframe, setTimeframe] = useState<TimeframeKey>(() => {
+    const saved = localStorage.getItem("floor.dailyRawTimeframe") as TimeframeKey | null;
+    return saved && ["combined", "5", "15"].includes(saved) ? saved : "combined";
+  });
   const chooseRange = (next: RangeKey) => {
     setRange(next);
     localStorage.setItem("floor.dailyRawRange", next);
   };
+  const chooseTimeframe = (next: TimeframeKey) => {
+    setTimeframe(next);
+    localStorage.setItem("floor.dailyRawTimeframe", next);
+  };
+  const effectiveHorizonMin = horizonMin
+    ?? (timeframe === "combined" ? null : Number(timeframe) as 5 | 15);
 
   const filteredRows = useMemo(
     () => ledger.rows.filter((row) =>
-      (horizonMin == null || row.horizonMin === horizonMin)
+      (effectiveHorizonMin == null || row.horizonMin === effectiveHorizonMin)
       && (assets == null || assets.includes(row.pair.replace("-USD", "")))
     ),
-    [assets, horizonMin, ledger.rows],
+    [assets, effectiveHorizonMin, ledger.rows],
   );
   const allDays = useMemo(() => {
     const observed = filteredRows.map((row) => row.day).sort();
@@ -146,24 +157,50 @@ export function PolymarketDailyRawLedger({
             </CardTitle>
             <p className="mt-1 text-[11px] text-muted-foreground">
               {ledger.timeZone} · attributed when the market is graded · selected Paper Floor scope
-              {horizonMin ? ` · ${horizonMin}m only` : " · 5m + 15m"}
+              {effectiveHorizonMin ? ` · ${effectiveHorizonMin}m only` : " · 5m + 15m"}
               {assets ? ` · ${assets.join(", ")}` : ""}
             </p>
           </div>
-          <div className="flex rounded-md border bg-muted/10 p-0.5 text-xs">
-            {(["7", "14", "30", "all"] as const).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => chooseRange(key)}
-                aria-pressed={range === key}
-                className={"rounded px-2 py-1 transition-colors " + (range === key
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground")}
+          <div className="flex flex-wrap items-center gap-2">
+            {horizonMin == null ? (
+              <div
+                className="flex rounded-md border bg-muted/10 p-0.5 text-xs"
+                aria-label="Daily RAW timeframe"
               >
-                {key === "all" ? "All" : `${key}D`}
-              </button>
-            ))}
+                {([
+                  ["combined", "5m + 15m"],
+                  ["5", "5m"],
+                  ["15", "15m"],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => chooseTimeframe(key)}
+                    aria-pressed={timeframe === key}
+                    className={"rounded px-2 py-1 transition-colors " + (timeframe === key
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex rounded-md border bg-muted/10 p-0.5 text-xs">
+              {(["7", "14", "30", "all"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => chooseRange(key)}
+                  aria-pressed={range === key}
+                  className={"rounded px-2 py-1 transition-colors " + (range === key
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground")}
+                >
+                  {key === "all" ? "All" : `${key}D`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </CardHeader>

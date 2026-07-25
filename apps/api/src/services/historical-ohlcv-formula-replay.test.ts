@@ -107,6 +107,34 @@ test("historical replay is gap-safe, chronological, and preserves every declared
   assert.match(historicalFormulaReplayReceiptHash(result), /^sha256:[a-f0-9]{64}$/);
 });
 
+test("period observations are opt-in and preserve the ordinary receipt shape", () => {
+  const input = {
+    datasetId: "synthetic",
+    datasetVersion: "v1",
+    datasetContentHash: "sha256:synthetic",
+    rows: syntheticRows(240),
+    expression: parseLegacyFormula("Sub($close,$open)"),
+    config,
+  };
+  const ordinary = runHistoricalOhlcvFormulaReplay(input);
+  const captured = runHistoricalOhlcvFormulaReplay({
+    ...input,
+    captureObservations: true,
+  });
+  assert.ok(ordinary.trials.every((trial) => trial.observations == null));
+  assert.ok(captured.trials.every((trial) => Array.isArray(trial.observations)));
+  assert.ok(captured.trials.every((trial) =>
+    trial.observations!.length === trial.aggregate.trades));
+  assert.ok(captured.trials.every((trial) =>
+    trial.observations!.every((observation, index, observations) =>
+      index === 0 || observation.entryAtMs >= observations[index - 1]!.exitAtMs)));
+  const stripped = {
+    ...captured,
+    trials: captured.trials.map(({ observations: _observations, ...trial }) => trial),
+  };
+  assert.deepEqual(stripped, ordinary);
+});
+
 test("future prices cannot alter the first fold training threshold", () => {
   const rows = syntheticRows(240);
   const expression = parseLegacyFormula("Sub($close,$open)");

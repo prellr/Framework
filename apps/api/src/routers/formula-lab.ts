@@ -8,6 +8,9 @@ import {
   researchControlPlaneStatus,
   researchValidationFamilySummary,
 } from "../services/research-control-plane.ts";
+import {
+  HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT,
+} from "../services/historical-albert-calendar-period-receipt.ts";
 
 /**
  * Jester-wide, venue-neutral formula research.
@@ -18,6 +21,9 @@ import {
  */
 export const formulaLabRouter = t.router({
   status: protectedProcedure.query(() => formulaLabStatus()),
+  calendarPeriods: protectedProcedure.query(
+    () => HISTORICAL_ALBERT_CALENDAR_PERIOD_RECEIPT,
+  ),
   scaleStatus: protectedProcedure.query(() => formulaicScaleStatus()),
   controlPlaneStatus: protectedProcedure.query(() => researchControlPlaneStatus()),
   validationSummary: protectedProcedure

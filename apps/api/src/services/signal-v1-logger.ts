@@ -1,6 +1,7 @@
 /**
- * Jester V1 entry logger — tournament bot #5's feed. V1 (jester_v1_remastered) is SUBSCRIBED on the
- * live account (user's action, min risk-per-trade), which unlocks its live entry signals. An early
+ * Jester V1 entry logger — tournament bot #5's feed. V1 (jester_v1_remastered) must be subscribed
+ * on the selected Jester account before its live entry signals are available. The logger verifies
+ * that external state instead of assuming it, but it never subscribes or changes the account. An early
  * symmetric-bracket screen called the entries counter-informative against an assumed 50% baseline;
  * that conclusion was retracted when the catalogue screen established an empirical centre near 40%.
  * The fixed fade/follow bridge therefore has no retrospective edge claim: both orientations stand
@@ -18,6 +19,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db, jesterCredentials, signalSnapshots } from "@framework/db";
 import { getSetting, setSetting } from "./config.ts";
 import { jesterCall } from "./jester.ts";
+import { resolveV1PollState } from "./signal-v1-source-health.ts";
 
 export const V1_SOURCE = "jester_v1";
 export const V1_STRATEGY_ID = "jester_v1_remastered";
@@ -34,10 +36,15 @@ export type V1IngestHealth = {
   written: number;
   unsided: number;
   credentialPresent: boolean;
+  subscriptionChecked: boolean;
+  subscribed: boolean | null;
   notificationOk: boolean;
+  notificationSkipped: boolean;
   historyChecks: number;
   historySucceeded: number;
 };
+
+let cachedSubscribed: boolean | null = null;
 
 async function readTool(
   userId: string,
@@ -107,7 +114,11 @@ async function logEvent(pair: string, side: "buy" | "sell", eventMs: number, raw
   return true;
 }
 
-/** One ingestion pass. `deep` also polls signals_history (rate-limit-prone; call every ~3rd tick). */
+/**
+ * One ingestion pass. A deep tick first audits the external subscription and polls signals_history
+ * only when the source is subscribed or the audit is inconclusive. Confirmed unsubscribes remain a
+ * visible, low-load no-op until the next deep check. This service never changes subscription state.
+ */
 export async function ingestV1Signals(deep: boolean): Promise<V1IngestHealth> {
   const [cred] = await db.select({ userId: jesterCredentials.userId }).from(jesterCredentials).limit(1);
   if (!cred) {
@@ -115,12 +126,44 @@ export async function ingestV1Signals(deep: boolean): Promise<V1IngestHealth> {
       written: 0,
       unsided: 0,
       credentialPresent: false,
+      subscriptionChecked: false,
+      subscribed: null,
       notificationOk: false,
+      notificationSkipped: true,
       historyChecks: 0,
       historySucceeded: 0,
     };
   }
   const u = cred.userId;
+  let auditedSubscription: boolean | null = null;
+  if (deep) {
+    const subscriptionRead = await readTool(
+      u,
+      "jester_subscription_audit",
+      { strategyId: V1_STRATEGY_ID },
+    );
+    if (
+      subscriptionRead.ok
+      && typeof subscriptionRead.value?.subscribed === "boolean"
+    ) {
+      auditedSubscription = subscriptionRead.value.subscribed;
+      cachedSubscribed = auditedSubscription;
+    }
+  }
+  const pollState = resolveV1PollState(cachedSubscribed, auditedSubscription);
+  if (!pollState.shouldPoll) {
+    return {
+      written: 0,
+      unsided: 0,
+      credentialPresent: true,
+      subscriptionChecked: deep,
+      subscribed: pollState.subscribed,
+      notificationOk: false,
+      notificationSkipped: true,
+      historyChecks: 0,
+      historySucceeded: 0,
+    };
+  }
   const pairs = await v1Pairs();
   const cursor = Number((await getSetting(CURSOR_KEY)) ?? 0);
   let maxSeen = cursor;
@@ -173,7 +216,10 @@ export async function ingestV1Signals(deep: boolean): Promise<V1IngestHealth> {
     written,
     unsided,
     credentialPresent: true,
+    subscriptionChecked: deep,
+    subscribed: pollState.subscribed,
     notificationOk: notificationRead.ok,
+    notificationSkipped: false,
     historyChecks,
     historySucceeded,
   };
