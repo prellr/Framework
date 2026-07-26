@@ -21,6 +21,7 @@ import { KnowledgePage } from "./pages/kb/KnowledgePage";
 import { PolymarketPage } from "./pages/polymarket/PolymarketPage";
 import { PolymarketStrategyDetailPage } from "./pages/polymarket/PolymarketStrategyDetailPage";
 import { PolymarketAssetDetailPage } from "./pages/polymarket/PolymarketAssetDetailPage";
+import { PolymarketUnder35PortfolioPage } from "./pages/polymarket/PolymarketUnder35PortfolioPage";
 import { FormulaLabPage } from "./pages/formula-lab/FormulaLabPage";
 import { CruciblePage } from "./pages/crucible/CruciblePage";
 import { AnalyticsPage } from "./pages/analytics/AnalyticsPage";
@@ -185,6 +186,12 @@ const polymarketRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket",
   component: PolymarketPage,
+});
+
+const polymarketUnder35Route = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/polymarket/under-35",
+  component: PolymarketUnder35PortfolioPage,
 });
 
 const crucibleRoute = createRoute({
@@ -388,6 +395,7 @@ const routeTree = rootRoute.addChildren([
     tesseractRoute,
     knowledgeRoute,
     polymarketRoute,
+    polymarketUnder35Route,
     polymarketStrategyRoute,
     polymarketAssetRoute,
     formulaLabRoute,

@@ -34,6 +34,7 @@ import { idNr4QualityDistributionAudit } from "../services/id-nr4-quality-distri
 import { z } from "zod";
 import { paperPerformance } from "../services/paper-performance.ts";
 import { paperExecutionCapital } from "../services/paper-execution-capital.ts";
+import { paperUnder35Portfolio } from "../services/paper-under-35-portfolio.ts";
 import { polymarketConnectorReadiness } from "../services/polymarket-connector-readiness.ts";
 
 /**
@@ -113,6 +114,17 @@ export const polymarketRouter = t.router({
       }),
     )
     .query(({ input }) => paperExecutionCapital(input)),
+  // Exact registered strategy × timeframe roster with seven local-calendar-day `<35¢` RAW cells.
+  // Selection happens only in the browser research workspace; no paper or execution mutation exists.
+  under35Portfolio: protectedProcedure
+    .input(
+      z.object({
+        scope: z.enum(["paper", "forward", "history"]).default("paper"),
+        horizon: z.union([z.literal("all"), z.literal(5), z.literal(15)]).default("all"),
+        timezone: z.string().min(1).max(64).default("America/Chicago"),
+      }),
+    )
+    .query(({ input }) => paperUnder35Portfolio(input)),
   // Raw prospective research-tape readiness only; no outcome-conditioned diagnostics before its floor.
   microstructureTape: protectedProcedure.query(() => polymarketMicrostructureTapeStatus()),
   // Same-book $5/$10/$20 depth coverage only; no outcomes, strategy evidence, or execution path.

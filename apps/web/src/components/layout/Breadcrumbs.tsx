@@ -21,6 +21,7 @@ const NODES: Record<string, { label: string; parent?: string }> = {
   "/screens": { label: "Screens & Alerts", parent: "/dashboard" },
   "/knowledge": { label: "Knowledge", parent: "/dashboard" },
   "/polymarket": { label: "Polymarket", parent: "/dashboard" },
+  "/polymarket/under-35": { label: "Under 35¢ Portfolio", parent: "/polymarket" },
   "/live": { label: "Live", parent: "/dashboard" },
   "/settings": { label: "Settings", parent: "/dashboard" },
   "/notes": { label: "Notes", parent: "/dashboard" },
@@ -57,7 +58,10 @@ export function Breadcrumbs() {
 
   // Resolve a strategy id → its name for the leaf crumb (cached; shared with the catalog page).
   const strategyMatch = pathname.match(/^\/strategy\/(.+)$/);
-  const catalog = trpc.catalog.list.useQuery(undefined, { staleTime: 60_000, enabled: !!strategyMatch });
+  const catalog = trpc.catalog.list.useQuery(undefined, {
+    staleTime: 60_000,
+    enabled: !!strategyMatch,
+  });
 
   const path = pathname === "/" ? "/dashboard" : pathname.replace(/\/+$/, "");
   let trail: Crumb[];
@@ -78,11 +82,11 @@ export function Breadcrumbs() {
   if (onHome && depth === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 border-b bg-card/60 px-4 py-2 text-sm">
+    <div className="bg-card/60 flex items-center gap-2 border-b px-4 py-2 text-sm">
       {depth > 0 && (
         <button
           onClick={() => router.history.back()}
-          className="mr-1 inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="border-input text-muted-foreground hover:bg-accent hover:text-foreground mr-1 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors"
           title="Back to the previous page"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -94,20 +98,26 @@ export function Breadcrumbs() {
           const last = i === trail.length - 1;
           return (
             <span key={i} className="flex min-w-0 items-center gap-1.5">
-              {i === 0 && <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+              {i === 0 && (
+                <LayoutDashboard className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+              )}
               {c.to && !last ? (
                 <Link
                   to={c.to as string}
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground hover:underline"
+                  className="text-muted-foreground hover:text-foreground shrink-0 transition-colors hover:underline"
                 >
                   {c.label}
                 </Link>
               ) : (
-                <span className={last ? "truncate font-medium text-foreground" : "shrink-0 text-muted-foreground"}>
+                <span
+                  className={
+                    last ? "text-foreground truncate font-medium" : "text-muted-foreground shrink-0"
+                  }
+                >
                   {c.label}
                 </span>
               )}
-              {!last && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />}
+              {!last && <ChevronRight className="text-muted-foreground/50 h-3.5 w-3.5 shrink-0" />}
             </span>
           );
         })}

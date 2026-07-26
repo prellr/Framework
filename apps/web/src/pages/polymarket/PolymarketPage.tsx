@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PolymarketStrategyLab } from "./PolymarketStrategyLab";
 import { PolymarketPaperFloor } from "./PolymarketPaperFloor";
@@ -7,7 +8,9 @@ import { PolymarketFindings } from "./PolymarketFindings";
 import { PolymarketExecutionCapital } from "./PolymarketExecutionCapital";
 
 export function PolymarketPage() {
-  const [tab, setTab] = useState<"scoreboard" | "lab" | "execution" | "floor" | "findings">("scoreboard");
+  const [tab, setTab] = useState<"scoreboard" | "lab" | "execution" | "floor" | "findings">(
+    "scoreboard",
+  );
   return (
     <div className="space-y-5">
       <PageHeader
@@ -16,15 +19,34 @@ export function PolymarketPage() {
       />
 
       <div className="flex gap-1 border-b">
-        {([["scoreboard", "Scoreboard"], ["lab", "Strategy Lab"], ["execution", "Execution & Capital"], ["floor", "Paper Floor"], ["findings", "Findings"]] as const).map(([id, label]) => (
+        {(
+          [
+            ["scoreboard", "Scoreboard"],
+            ["lab", "Strategy Lab"],
+            ["execution", "Execution & Capital"],
+            ["floor", "Paper Floor"],
+            ["findings", "Findings"],
+          ] as const
+        ).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={"border-b-2 px-3 py-2 text-sm font-medium transition-colors " + (tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+            className={
+              "border-b-2 px-3 py-2 text-sm font-medium transition-colors " +
+              (tab === id
+                ? "border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground border-transparent")
+            }
           >
             {label}
           </button>
         ))}
+        <Link
+          to="/polymarket/under-35"
+          className="text-muted-foreground hover:text-foreground border-b-2 border-transparent px-3 py-2 text-sm font-medium transition-colors"
+        >
+          Under 35¢ Portfolio
+        </Link>
       </div>
 
       {tab === "findings" ? (
