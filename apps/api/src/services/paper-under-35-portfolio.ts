@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { db, paperTrades } from "@framework/db";
 import { PAPER_BOTS, paperBotBucketUniverse } from "./paper-floor.ts";
 import { paperPerformanceStartMs, type PaperPerformanceScope } from "./paper-performance.ts";
@@ -8,6 +8,11 @@ export type PaperUnder35Horizon = "all" | 5 | 15;
 export interface PaperUnder35PortfolioInput {
   scope: PaperPerformanceScope;
   horizon: PaperUnder35Horizon;
+  timezone: string;
+}
+
+export interface PaperUnder35TradeHistoryInput {
+  scope: PaperPerformanceScope;
   timezone: string;
 }
 
@@ -24,6 +29,7 @@ const UNDER_35_MAX_ASK = 0.35;
 const CAPTURED_STAKE_USD = 5;
 const HORIZONS = [5, 15] as const;
 const CACHE_TTL_MS = 30_000;
+const TRADE_HISTORY_LIMIT = 10_000;
 
 const num = (value: number | string | null | undefined) => Number(value ?? 0);
 
@@ -93,13 +99,14 @@ async function loadPaperUnder35Portfolio(input: PaperUnder35PortfolioInput, nowM
   const currentDay = dayKeys.at(-1) ?? under35LocalDayKey(nowMs, timezone);
   const firstDay = dayKeys[0] ?? currentDay;
   const scopeStartMs = paperPerformanceStartMs(input.scope, "all", nowMs);
+  const indexedStartMs = Math.max(scopeStartMs ?? 0, nowMs - 8 * 86_400_000);
   const localTime = sql`timezone(${timezone}, ${paperTrades.windowStart} at time zone 'UTC')`;
   const localDay = sql<string>`to_char(${localTime}, 'YYYY-MM-DD')`;
   const condition = and(
     inArray(paperTrades.status, ["won", "lost"]),
     lt(paperTrades.askPaid, UNDER_35_MAX_ASK),
+    gte(paperTrades.windowStart, new Date(indexedStartMs)),
     sql`(${localTime})::date >= ${firstDay}::date`,
-    ...(scopeStartMs == null ? [] : [gte(paperTrades.windowStart, new Date(scopeStartMs))]),
     ...(input.horizon === "all" ? [] : [eq(paperTrades.horizonMin, input.horizon)]),
   ) as SQL;
 
@@ -232,5 +239,154 @@ export async function paperUnder35Portfolio(input: PaperUnder35PortfolioInput) {
       under35Loading.delete(key);
     });
   under35Loading.set(key, loading);
+  return loading;
+}
+
+async function loadPaperUnder35TradeHistory(input: PaperUnder35TradeHistoryInput, nowMs: number) {
+  const timezone = validTimezone(input.timezone);
+  const dayKeys = trailingUnder35DayKeys(nowMs, timezone);
+  const currentDay = dayKeys.at(-1) ?? under35LocalDayKey(nowMs, timezone);
+  const firstDay = dayKeys[0] ?? currentDay;
+  const scopeStartMs = paperPerformanceStartMs(input.scope, "all", nowMs);
+  const indexedStartMs = Math.max(scopeStartMs ?? 0, nowMs - 8 * 86_400_000);
+  const localTime = sql`timezone(${timezone}, ${paperTrades.windowStart} at time zone 'UTC')`;
+  const localDay = sql<string>`to_char(${localTime}, 'YYYY-MM-DD')`;
+  const condition = and(
+    inArray(
+      paperTrades.botKey,
+      PAPER_BOTS.map((bot) => bot.key),
+    ),
+    inArray(paperTrades.horizonMin, [...HORIZONS]),
+    inArray(paperTrades.status, ["won", "lost"]),
+    lt(paperTrades.askPaid, UNDER_35_MAX_ASK),
+    gte(paperTrades.windowStart, new Date(indexedStartMs)),
+    sql`(${localTime})::date >= ${firstDay}::date`,
+  ) as SQL;
+
+  const rows = await db
+    .select({
+      id: paperTrades.id,
+      botKey: paperTrades.botKey,
+      conditionId: paperTrades.conditionId,
+      slug: paperTrades.slug,
+      pair: paperTrades.pair,
+      horizonMin: paperTrades.horizonMin,
+      windowStart: paperTrades.windowStart,
+      decidedAt: paperTrades.decidedAt,
+      gradedAt: paperTrades.gradedAt,
+      side: paperTrades.side,
+      pSignal: paperTrades.pSignal,
+      askPaid: paperTrades.askPaid,
+      edgeAsk: paperTrades.edgeAsk,
+      sizeUsd: paperTrades.sizeUsd,
+      signalAgeSec: paperTrades.signalAgeSec,
+      status: paperTrades.status,
+      pnlUsd: paperTrades.pnlUsd,
+      localDay,
+      totalRows: sql<number>`(count(*) over())::int`,
+    })
+    .from(paperTrades)
+    .where(condition)
+    .orderBy(desc(paperTrades.windowStart), desc(paperTrades.decidedAt), desc(paperTrades.id))
+    .limit(TRADE_HISTORY_LIMIT);
+
+  const botByKey = new Map(PAPER_BOTS.map((bot) => [bot.key, bot]));
+  const total = num(rows[0]?.totalRows);
+  const trades = rows.map((row) => {
+    const bot = botByKey.get(row.botKey);
+    const ask = num(row.askPaid);
+    const sizeUsd = num(row.sizeUsd);
+    return {
+      id: row.id,
+      cohortKey: `${row.botKey}:${row.horizonMin}`,
+      botKey: row.botKey,
+      botName: bot?.name ?? row.botKey,
+      botColor: bot?.color ?? "#94a3b8",
+      conditionId: row.conditionId,
+      slug: row.slug,
+      pair: row.pair,
+      horizonMin: row.horizonMin,
+      windowStartMs: row.windowStart.getTime(),
+      decidedAtMs: row.decidedAt.getTime(),
+      gradedAtMs: row.gradedAt?.getTime() ?? null,
+      side: row.side,
+      pSignal: row.pSignal,
+      ask: ask,
+      edgeAsk: row.edgeAsk,
+      sizeUsd,
+      contracts: ask > 0 ? sizeUsd / ask : null,
+      signalAgeSec: row.signalAgeSec,
+      status: row.status as "won" | "lost",
+      rawNet: num(row.pnlUsd),
+      localDay: row.localDay,
+    };
+  });
+
+  return {
+    version: "paper-under-35-trade-history-v1",
+    paperOnly: true as const,
+    executionCapability: false as const,
+    scope: input.scope,
+    timezone,
+    threshold: {
+      operator: "<" as const,
+      maxAsk: UNDER_35_MAX_ASK,
+      maxAskCents: UNDER_35_MAX_ASK * 100,
+      priceSource: "recorded fee-adjusted $5 book-walk VWAP",
+    },
+    attributionClock: "window_start" as const,
+    dayKeys,
+    currentDay,
+    scopeStartMs,
+    toMs: nowMs,
+    total,
+    returned: trades.length,
+    limit: TRADE_HISTORY_LIMIT,
+    truncated: total > trades.length,
+    trades,
+    methodology: {
+      rows: "Each row is one graded strategy decision below the recorded 35¢ ask cap. No strategy decision is deduplicated or converted into an assumed fill.",
+      grouping:
+        "Time groups are a browser-side view of the same rows. Market-window groups use the exact recorded window start; hour and calendar-day groups use America/Chicago display boundaries.",
+      overlap:
+        "Cluster stake and RAW are row sums. Unique market-side exposure counts reveal strategies sharing the same condition and side; those shared decisions are not independent capital uses.",
+    },
+  };
+}
+
+const under35HistoryCache = new Map<
+  string,
+  {
+    expiresAtMs: number;
+    value: Awaited<ReturnType<typeof loadPaperUnder35TradeHistory>>;
+  }
+>();
+const under35HistoryLoading = new Map<
+  string,
+  Promise<Awaited<ReturnType<typeof loadPaperUnder35TradeHistory>>>
+>();
+
+/** Read-only, bounded trade ledger for the seven-calendar-day `<35¢` workbench. */
+export async function paperUnder35TradeHistory(input: PaperUnder35TradeHistoryInput) {
+  const timezone = validTimezone(input.timezone);
+  const key = JSON.stringify({ ...input, timezone });
+  const nowMs = Date.now();
+  const cached = under35HistoryCache.get(key);
+  if (cached && cached.expiresAtMs > nowMs) return cached.value;
+  const active = under35HistoryLoading.get(key);
+  if (active) return active;
+
+  const loading = loadPaperUnder35TradeHistory({ ...input, timezone }, nowMs)
+    .then((value) => {
+      under35HistoryCache.set(key, {
+        value,
+        expiresAtMs: Date.now() + CACHE_TTL_MS,
+      });
+      return value;
+    })
+    .finally(() => {
+      under35HistoryLoading.delete(key);
+    });
+  under35HistoryLoading.set(key, loading);
   return loading;
 }

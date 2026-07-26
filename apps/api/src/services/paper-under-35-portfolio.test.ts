@@ -40,6 +40,18 @@ test("under-35 evidence uses the recorded fee-adjusted ask and seven local dates
   );
 });
 
+test("under-35 trade history is bounded, graded, and carries exact decision evidence", () => {
+  assert.match(router, /under35TradeHistory:\s*protectedProcedure[\s\S]*?\.query/);
+  assert.match(service, /TRADE_HISTORY_LIMIT\s*=\s*10_000/);
+  assert.match(service, /inArray\(paperTrades\.status,\s*\["won",\s*"lost"\]\)/);
+  assert.match(service, /conditionId:\s*paperTrades\.conditionId/);
+  assert.match(service, /windowStartMs:\s*row\.windowStart\.getTime\(\)/);
+  assert.match(service, /decidedAtMs:\s*row\.decidedAt\.getTime\(\)/);
+  assert.match(service, /ask:\s*ask/);
+  assert.match(service, /rawNet:\s*num\(row\.pnlUsd\)/);
+  assert.match(service, /Unique market-side exposure counts reveal strategies sharing/);
+});
+
 test("under-35 selection projection remains read-only and cannot alter strategy state", () => {
   assert.match(service, /paperOnly:\s*true as const/);
   assert.match(service, /executionCapability:\s*false as const/);
@@ -56,6 +68,23 @@ test("dedicated page exposes a seven-day sortable inclusion workbench", () => {
   assert.match(page, /Select visible/);
   assert.match(page, /Clear visible/);
   assert.match(page, /SELECTION_STORAGE_KEY/);
+  assert.match(page, /WORKSPACE_STORAGE_KEY/);
+  assert.match(page, /localStorage\.setItem\(\s*WORKSPACE_STORAGE_KEY/);
   assert.match(page, /PolymarketSortableHeader/);
   assert.match(page, /Research selection · no strategy mutation/);
+  assert.match(page, /Stake per decision/);
+  assert.match(page, /value:\s*50,\s*label:\s*"\$50"/);
+  assert.match(page, /Trade quantity/);
+  assert.match(page, /Seven-day cells/);
+});
+
+test("dedicated page groups selected trade history without deduplicating accounting", () => {
+  assert.match(page, /Selected-cohort trade history/);
+  assert.match(page, /Market window/);
+  assert.match(page, /Calendar day/);
+  assert.match(page, /selectedKeys\.has\(trade\.cohortKey\)/);
+  assert.match(page, /`\$\{trade\.conditionId\}:\$\{trade\.side\}`/);
+  assert.match(page, /overlapping strategy decisions/);
+  assert.match(page, /row sums are not capital-deduplicated/);
+  assert.match(page, /Entry ask/);
 });
