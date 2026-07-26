@@ -103,21 +103,22 @@ ssh admin@192.168.2.17 '
   printf "%s\n" "$recovery_dir"
 '
 
-# 4. Preview the exact source delta. Review deletes before removing -n.
+# 4. Preview the exact source delta. Review deletes before removing -n. `.research-data` is
+#    generated/persisted on Server2 and must never be reconciled to the source checkout.
 rsync -azn --delete --itemize-changes \
   --exclude node_modules --exclude .git --exclude .env \
-  --exclude '.codex-*' --exclude backups \
+  --exclude '.codex-*' --exclude backups --exclude .research-data \
   --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
   --exclude .turbo --exclude .benchmarks \
   --exclude tmp --exclude .venv --exclude __pycache__ \
   --exclude '*.egg-info' --exclude '*.pyc' --exclude dist \
   ./ admin@192.168.2.17:/Users/admin/jester-analytics/
 
-# 5. Sync the repo to the server. In-tree historical recovery material is protected from
-#    --delete; new release recovery points live outside the deployment tree.
+# 5. Sync the repo to the server. In-tree historical recovery material and generated research
+#    datasets are protected from --delete; new release recovery points live outside the tree.
 rsync -az --delete \
   --exclude node_modules --exclude .git --exclude .env \
-  --exclude '.codex-*' --exclude backups \
+  --exclude '.codex-*' --exclude backups --exclude .research-data \
   --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
   --exclude .turbo --exclude .benchmarks \
   --exclude tmp --exclude .venv --exclude __pycache__ \
@@ -169,7 +170,7 @@ restore_dir=$(mktemp -d)
 tar -xzf "$recovery_dir/source.tgz" -C "$restore_dir"
 rsync -az --delete \
   --exclude .env --exclude .git --exclude node_modules \
-  --exclude '.codex-*' --exclude backups \
+  --exclude '.codex-*' --exclude backups --exclude .research-data \
   --exclude .ruff_cache --exclude .pytest_cache --exclude .mypy_cache \
   --exclude .turbo --exclude .benchmarks \
   --exclude tmp --exclude .venv --exclude __pycache__ \
