@@ -31,6 +31,8 @@ identifiers.
   those ceilings.
 - Production Docker contexts exclude environment files, database backups, local dependency trees,
   and temporary deployment artifacts so secrets cannot be copied into application images.
+- Production API and worker processes consume Compose-injected environment variables and treat a
+  local `.env` file as optional rather than requiring a secret-bearing file inside the image.
 - No account verification, authentication, order submission, cancellation, or live execution route
   was added.
 

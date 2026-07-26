@@ -56,10 +56,17 @@ test("multi-wallet storage preserves account isolation and fail-closed risk ceil
 
 test("production images cannot ingest deployment secrets or database backups", () => {
   const dockerignore = read("../../../../.dockerignore");
+  const apiPackage = JSON.parse(read("../../package.json")) as {
+    scripts: { start: string; worker: string };
+  };
 
   assert.match(dockerignore, /^\.env$/m);
   assert.match(dockerignore, /^\.env\.\*$/m);
   assert.match(dockerignore, /^backups$/m);
   assert.match(dockerignore, /^\*\.dump$/m);
   assert.match(dockerignore, /^node_modules$/m);
+  assert.match(apiPackage.scripts.start, /--env-file-if-exists/);
+  assert.match(apiPackage.scripts.worker, /--env-file-if-exists/);
+  assert.doesNotMatch(apiPackage.scripts.start, /(?:^|\s)--env-file=/);
+  assert.doesNotMatch(apiPackage.scripts.worker, /(?:^|\s)--env-file=/);
 });
