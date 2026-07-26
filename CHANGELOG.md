@@ -29,6 +29,8 @@ identifiers.
   the current user, and omit secrets from responses and audit records.
 - Account limits fail closed until all administrator ceilings are configured and may never exceed
   those ceilings.
+- Production Docker contexts exclude environment files, database backups, local dependency trees,
+  and temporary deployment artifacts so secrets cannot be copied into application images.
 - No account verification, authentication, order submission, cancellation, or live execution route
   was added.
 

@@ -53,3 +53,13 @@ test("multi-wallet storage preserves account isolation and fail-closed risk ceil
   assert.match(router, /system-wide Polymarket risk ceilings/);
   assert.match(router, /Choose another default account before unsetting this one/);
 });
+
+test("production images cannot ingest deployment secrets or database backups", () => {
+  const dockerignore = read("../../../../.dockerignore");
+
+  assert.match(dockerignore, /^\.env$/m);
+  assert.match(dockerignore, /^\.env\.\*$/m);
+  assert.match(dockerignore, /^backups$/m);
+  assert.match(dockerignore, /^\*\.dump$/m);
+  assert.match(dockerignore, /^node_modules$/m);
+});
