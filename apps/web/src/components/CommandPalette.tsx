@@ -87,10 +87,16 @@ const PAGES: { label: string; to: string; keywords: string; section: SectionKey 
     section: "live",
   },
   {
-    label: "Settings — connection & admin",
+    label: "Settings — personal connections & wallets",
     to: "/settings",
-    keywords: "api key credentials jester connection admin users timezone",
+    keywords: "api key credentials jester connection polymarket wallets",
     section: "settings",
+  },
+  {
+    label: "Admin — users, access & system settings",
+    to: "/admin",
+    keywords: "admin users roles section access login history runtime configuration",
+    section: "admin",
   },
 ];
 

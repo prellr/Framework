@@ -413,10 +413,7 @@ const tradingRoute = createRoute({
 const adminRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/admin",
-  beforeLoad: async () => {
-    await requireSection("settings");
-    throw redirect({ to: "/settings" });
-  },
+  beforeLoad: () => requireSection("admin"),
   component: AdminPage,
 });
 

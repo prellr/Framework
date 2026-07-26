@@ -16,6 +16,7 @@ export const SECTION_KEYS = [
   "knowledge",
   "live",
   "settings",
+  "admin",
 ] as const;
 
 export type SectionKey = (typeof SECTION_KEYS)[number];
@@ -109,8 +110,14 @@ export const SECTION_DEFINITIONS: ReadonlyArray<{
   {
     key: "settings",
     label: "Settings",
-    description: "Personal connections and wallets; admin configuration remains admin-only.",
+    description: "Personal connections and Polymarket wallets.",
     hardFloor: "viewer",
+  },
+  {
+    key: "admin",
+    label: "Admin",
+    description: "Users, login history, page access, and system configuration.",
+    hardFloor: "admin",
   },
 ];
 

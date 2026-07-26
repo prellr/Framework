@@ -17,7 +17,8 @@ export type SectionKey =
   | "screens"
   | "knowledge"
   | "live"
-  | "settings";
+  | "settings"
+  | "admin";
 
 export type SectionAccess = Record<SectionKey, Role>;
 
@@ -43,6 +44,7 @@ export const DEFAULT_SECTION_ACCESS: SectionAccess = {
   knowledge: "viewer",
   live: "viewer",
   settings: "viewer",
+  admin: "admin",
 };
 
 export function canAccessSection(

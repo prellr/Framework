@@ -210,8 +210,8 @@ export const adminRouter = t.router({
     sectionAccessView(await getSectionAccess()),
   ),
 
-  // Admin-managed page visibility by role. Hard floors are normalized server-side so Sub35 can
-  // never be exposed below manager and Sweeps can never be exposed below operator.
+  // Admin-managed page visibility by role. Hard floors are normalized server-side so Admin can
+  // never be exposed below admin, Sub35 below manager, or Sweeps below operator.
   updateSectionAccess: adminProcedure
     .input(z.object({ access: z.record(z.string(), roleEnum) }))
     .mutation(async ({ input, ctx }) => {

@@ -50,7 +50,7 @@ function loginValue(event: LoginEvent, key: LoginSortKey): SortValue {
   }
 }
 
-export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
+export function AdminPage() {
   const [tab, setTab] = useState<AdminTab>("users");
 
   return (

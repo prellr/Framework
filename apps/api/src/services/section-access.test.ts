@@ -10,6 +10,7 @@ test("section access defaults cover every registered application section", () =>
   assert.deepEqual(Object.keys(DEFAULT_SECTION_ACCESS).sort(), [...SECTION_KEYS].sort());
   assert.equal(DEFAULT_SECTION_ACCESS.sub35, "manager");
   assert.equal(DEFAULT_SECTION_ACCESS.sweeps, "operator");
+  assert.equal(DEFAULT_SECTION_ACCESS.admin, "admin");
 });
 
 test("section access accepts stricter roles while preserving hard floors", () => {
@@ -19,6 +20,7 @@ test("section access accepts stricter roles while preserving hard floors", () =>
     sweeps: "viewer",
     sub35: "viewer",
     settings: "operator",
+    admin: "viewer",
     unknown: "admin",
   });
 
@@ -27,6 +29,7 @@ test("section access accepts stricter roles while preserving hard floors", () =>
   assert.equal(normalized.sweeps, "operator");
   assert.equal(normalized.sub35, "manager");
   assert.equal(normalized.settings, "operator");
+  assert.equal(normalized.admin, "admin");
   assert.equal("unknown" in normalized, false);
 });
 

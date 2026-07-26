@@ -53,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/knowledge", label: "Knowledge", icon: BookOpen, section: "knowledge" },
   { to: "/live", label: "Live", icon: Zap, section: "live" },
   { to: "/settings", label: "Settings", icon: KeyRound, section: "settings" },
+  { to: "/admin", label: "Admin", icon: Shield, section: "admin" },
 ];
 
 interface SidebarProps {
