@@ -103,21 +103,32 @@ async function loadPaperUnder35Portfolio(input: PaperUnder35PortfolioInput, nowM
     ...(input.horizon === "all" ? [] : [eq(paperTrades.horizonMin, input.horizon)]),
   ) as SQL;
 
-  const rows = await db
-    .select({
-      bot_key: paperTrades.botKey,
-      horizon_min: paperTrades.horizonMin,
-      local_day: localDay,
-      n: sql<number>`count(*)::int`,
-      wins: sql<number>`count(*) filter (where ${paperTrades.status} = 'won')::int`,
-      pnl: sql<number>`coalesce(sum(${paperTrades.pnlUsd}), 0)::double precision`,
-    })
-    .from(paperTrades)
-    .where(condition)
-    .groupBy(paperTrades.botKey, paperTrades.horizonMin, localDay);
+  const rowsResult = await db.execute(sql`
+    with base as materialized (
+      select
+        ${paperTrades.botKey} as bot_key,
+        ${paperTrades.horizonMin} as horizon_min,
+        ${paperTrades.status} as status,
+        ${paperTrades.pnlUsd} as pnl_usd,
+        ${localTime} as local_time
+      from ${paperTrades}
+      where ${condition}
+    )
+    select
+      bot_key,
+      horizon_min,
+      to_char(local_time, 'YYYY-MM-DD') as local_day,
+      count(*)::int as n,
+      count(*) filter (where status = 'won')::int as wins,
+      coalesce(sum(pnl_usd), 0)::double precision as pnl
+    from base
+    group by bot_key, horizon_min, local_day
+    order by local_day, bot_key, horizon_min
+  `);
+  const rows = rowsResult.rows as DailyRow[];
 
   const rowByKey = new Map(
-    (rows as DailyRow[]).map((row) => [`${row.bot_key}:${row.horizon_min}:${row.local_day}`, row]),
+    rows.map((row) => [`${row.bot_key}:${row.horizon_min}:${row.local_day}`, row]),
   );
 
   const cohorts = registeredCohorts(input.horizon).map((cohort) => {
