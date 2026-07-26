@@ -32,10 +32,13 @@ Already connected:
 New in `polymarket-connector-readiness-v1`:
 
 - A bounded live probe through the official public SDK.
-- A secret-free control-plane projection of wallet, signer, relayer, RPC, and risk configuration.
-- A dedicated **Settings → Polymarket connector** surface for account prerequisites, risk limits,
-  and research collectors. Signer, relayer-key, and RPC values are encrypted at rest and never
-  returned in plaintext.
+- A secret-free projection of public connectivity, Builder system configuration, shared RPC, and
+  platform-wide risk ceilings.
+- A dedicated **Settings → Polymarket accounts** surface where every user can store multiple
+  labeled wallets. Signer and Relayer credentials are encrypted per wallet and never returned in
+  plaintext.
+- A separate **Admin → Settings → Polymarket system connector** surface for the shared Builder
+  identity, research collectors, infrastructure, platform ceilings, and inert global arm.
 - A visible readiness panel in Execution & Capital.
 - Node 24 in the production image, matching the current SDK runtime requirement.
 
@@ -67,24 +70,61 @@ Source: [Wallets and Authentication](https://docs.polymarket.com/trading/wallets
 Alchemy should use a dedicated, tightly funded signer and account wallet. It should not reuse a
 general-purpose treasury or personal wallet.
 
-## Builder attribution decision
+## Builder and multi-wallet decision
 
-Alchemy has a Polymarket Builder profile, but Builder configuration is not a prerequisite for
-trading its own account. The public `builderCode` is an optional order-attribution value: attaching
-it lets Polymarket credit matched volume to Alchemy. It does not authenticate the CLOB account,
-replace the wallet signer, or enable an order route.
+Alchemy is now modeled as a multi-user platform, so the connector has two deliberately separate
+credential planes:
 
-The connector therefore stores `POLYMARKET_BUILDER_CODE` as an optional public bytes32 setting and
-keeps it outside account and risk readiness. We will attach it only when order submission is
-implemented. The Builder address is not the funded trading wallet. Builder API keys are not
-required for this internal single-account milestone; revisit them if Alchemy becomes a platform
-that routes orders for other users.
+1. **System / Admin:** Builder address, public Builder code, Builder API key/secret/passphrase,
+   shared Polygon RPC, research collectors, platform-wide risk ceilings, and the global execution
+   kill switch.
+2. **User account:** one or more labeled Polymarket wallets, each with its own wallet type, funder
+   address, signer address, encrypted signer private key, encrypted existing-account Relayer API
+   key, default flag, verification state, and risk budget bounded by the admin ceilings.
+
+The public `builderCode` attributes routed order volume to Alchemy. Builder credentials are the
+platform credentials used for future Builder-managed deposit-wallet provisioning and gasless
+operations; they do not replace the user's signer or authenticate an existing user account. An
+existing account follows Polymarket's Relayer-key connection flow, while a future newly provisioned
+account follows the Builder flow. Both can coexist without sharing wallet secrets between users.
+
+The first schema supports multiple existing accounts per user and reserves
+`connection_mode=builder-managed` plus the `deposit` wallet type for the provisioning phase. The UI
+does not expose Builder-managed creation until the provisioning and verification routes exist.
+For accounts deployed on or after May 4, 2026, Polymarket documents the Deposit Wallet as the
+default account type; legacy proxy and Safe accounts remain selectable for older connections.
+
+CLOB L2 API key, secret, and passphrase material is not collected by this milestone. A future
+read-only verification route will derive or create those credentials from the selected account's
+L1 signer, then seal each value independently before any authenticated private request is enabled.
 
 Sources:
 
-- [Builder Program overview](https://docs.polymarket.com/builders/overview)
-- [Order attribution](https://docs.polymarket.com/trading/orders/attribution)
-- [Builder API keys](https://docs.polymarket.com/builders/api-keys)
+- [Builder Program overview](https://docs.polymarket.com/programs/builders/overview)
+- [Wallets and authentication](https://docs.polymarket.com/trading/wallets-auth)
+- [API authentication](https://docs.polymarket.com/getting-started/api#authentication)
+
+## Credential and execution boundaries
+
+```text
+Admin system connector
+  ├─ public market-data collection
+  ├─ Builder identity and Builder API credentials
+  ├─ shared RPC and platform ceilings
+  └─ global execution kill switch
+
+User
+  └─ Polymarket accounts (many)
+      ├─ wallet/funder + wallet type
+      ├─ signer + existing-account Relayer key (encrypted)
+      ├─ per-account limits <= system ceilings
+      └─ default selection + verification state
+```
+
+Database uniqueness is user × wallet, not wallet globally. Cross-user reads and mutations are
+scoped by the authenticated user id. Removing a default wallet promotes the oldest remaining
+wallet. Secrets are sealed independently, excluded from every response projection, and omitted
+from audit payloads.
 
 ## Planned runtime shape
 
@@ -139,9 +179,10 @@ Source: [Polymarket Fees](https://docs.polymarket.com/trading/fees).
 ## Controlled activation sequence
 
 1. Public SDK probe — implemented.
-2. Configure dedicated wallet, signer, relayer, RPC, and explicit risk limits.
-3. Add an admin-only connection test that constructs `SecureClient`, reports the resolved account,
-   and performs read-only account/order/balance calls.
+2. Configure the Admin system connector and one or more per-user wallets with explicit account
+   limits.
+3. Add a user-owned connection test that constructs `SecureClient` for one selected wallet,
+   reports the resolved wallet type, and performs read-only account/order/balance calls.
 4. Add user-stream ingestion plus REST reconciliation and a durable account ledger.
 5. Add a dry-run order state machine that consumes real acknowledgements without posting orders.
 6. Add submission code behind a build-time capability flag and a separate runtime arm.

@@ -4,6 +4,7 @@ export * from "./login-events.ts";
 export * from "./settings.ts";
 export * from "./notes.ts";
 export * from "./jester-credentials.ts";
+export * from "./polymarket-accounts.ts";
 export * from "./strategies.ts";
 export * from "./backtest-runs.ts";
 export * from "./sweeps.ts";

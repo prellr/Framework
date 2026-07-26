@@ -37,6 +37,24 @@ export const managerProcedure = t.procedure.use(requireRole("manager"));
 export const adminProcedure = t.procedure.use(requireRole("admin"));
 
 /**
+ * HUMAN gate — for personal secrets and other user-owned security material.
+ *
+ * API-key/agent identities may use ordinary protected read surfaces, but they cannot inspect or
+ * mutate wallet-account metadata. Unlike the trade gate below, this does not require a manager
+ * role; every signed-in human may manage only their own accounts.
+ */
+const humanMiddleware = authedMiddleware.unstable_pipe(({ ctx, next }) => {
+  if (ctx.user.id === "agent" || !ctx.session) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This action requires a signed-in human session.",
+    });
+  }
+  return next({ ctx });
+});
+export const humanProcedure = t.procedure.use(humanMiddleware);
+
+/**
  * TRADE gate — the only procedures allowed to perform live mutating actions on the Jester account.
  * Requires ALL of: a real human session (never the synthetic agent/API-key user, which has no
  * session), and role ≥ manager. This keeps trading structurally unreachable from the agent/MCP/API
@@ -44,7 +62,10 @@ export const adminProcedure = t.procedure.use(requireRole("admin"));
  */
 const tradeMiddleware = authedMiddleware.unstable_pipe(({ ctx, next }) => {
   if (ctx.user.id === "agent" || !ctx.session) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Trading requires a signed-in human session." });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Trading requires a signed-in human session.",
+    });
   }
   const userRole = (ctx.user.role as Role) ?? "viewer";
   if (ROLE_RANK[userRole] < ROLE_RANK["manager"]) {

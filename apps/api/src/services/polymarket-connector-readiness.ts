@@ -15,11 +15,11 @@ export const POLYMARKET_CONNECTOR_READINESS = {
 } as const;
 
 export const POLYMARKET_CONNECTOR_SETTING_KEYS = {
-  walletAddress: "POLYMARKET_WALLET_ADDRESS",
-  signerPrivateKey: "POLYMARKET_SIGNER_PRIVATE_KEY",
-  relayerApiKey: "POLYMARKET_RELAYER_API_KEY",
-  relayerApiKeyAddress: "POLYMARKET_RELAYER_API_KEY_ADDRESS",
+  builderAddress: "POLYMARKET_BUILDER_ADDRESS",
   builderCode: "POLYMARKET_BUILDER_CODE",
+  builderApiKey: "POLYMARKET_BUILDER_API_KEY",
+  builderApiSecret: "POLYMARKET_BUILDER_API_SECRET",
+  builderApiPassphrase: "POLYMARKET_BUILDER_API_PASSPHRASE",
   polygonRpcUrl: "POLYGON_RPC_URL",
   liveExecutionEnabled: "POLYMARKET_LIVE_EXECUTION_ENABLED",
   maxOrderUsd: "POLYMARKET_MAX_ORDER_USD",
@@ -112,11 +112,12 @@ async function loadPublicProbe(
 }
 
 /**
- * Returns a secret-free connector control-plane projection.
+ * Returns a secret-free, system-level connector control-plane projection.
  *
- * It makes one bounded public SDK request and checks only whether account/risk settings exist and
- * are structurally valid. It never creates a SecureClient, signs a message, derives credentials,
- * reads balances, subscribes to the user stream, or exposes an order/cancel method.
+ * User wallets are deliberately absent: those are encrypted per-user rows managed by the
+ * polymarketAccounts router. This checks only public connectivity, the optional Builder platform
+ * identity, global infrastructure, and platform-wide risk ceilings. It never creates a
+ * SecureClient, signs a message, reads balances, or exposes an order/cancel method.
  */
 export async function polymarketConnectorReadiness(
   dependencies: ReadinessDependencies = {},
@@ -127,11 +128,11 @@ export async function polymarketConnectorReadiness(
   const keys = POLYMARKET_CONNECTOR_SETTING_KEYS;
   const [
     publicApi,
-    walletAddress,
-    signerPrivateKey,
-    relayerApiKey,
-    relayerApiKeyAddress,
+    builderAddress,
     builderCode,
+    builderApiKey,
+    builderApiSecret,
+    builderApiPassphrase,
     polygonRpcUrl,
     executionArm,
     maxOrderUsdRaw,
@@ -140,11 +141,11 @@ export async function polymarketConnectorReadiness(
     maxBookAgeMsRaw,
   ] = await Promise.all([
     loadPublicProbe(probe, nowMs, dependencies.probePublicClient == null),
-    readSetting(keys.walletAddress),
-    readSetting(keys.signerPrivateKey),
-    readSetting(keys.relayerApiKey),
-    readSetting(keys.relayerApiKeyAddress),
+    readSetting(keys.builderAddress),
     readSetting(keys.builderCode),
+    readSetting(keys.builderApiKey),
+    readSetting(keys.builderApiSecret),
+    readSetting(keys.builderApiPassphrase),
     readSetting(keys.polygonRpcUrl),
     readSetting(keys.liveExecutionEnabled),
     readSetting(keys.maxOrderUsd),
@@ -153,11 +154,12 @@ export async function polymarketConnectorReadiness(
     readSetting(keys.maxBookAgeMs),
   ]);
 
-  const walletValid = Boolean(walletAddress && EVM_ADDRESS.test(walletAddress));
-  const relayerAddressValid = Boolean(
-    relayerApiKeyAddress && EVM_ADDRESS.test(relayerApiKeyAddress),
-  );
+  const builderAddressValid = Boolean(builderAddress && EVM_ADDRESS.test(builderAddress));
   const builderCodeValid = Boolean(builderCode && BYTES_32.test(builderCode));
+  const builderCredentialCount = [builderApiKey, builderApiSecret, builderApiPassphrase].filter(
+    Boolean,
+  ).length;
+  const builderCredentialsReady = builderCredentialCount === 3;
   const risk = {
     maxOrderUsd: positiveNumber(maxOrderUsdRaw),
     maxOpenExposureUsd: positiveNumber(maxOpenExposureUsdRaw),
@@ -167,19 +169,18 @@ export async function polymarketConnectorReadiness(
   const riskControlsReady =
     Object.values(risk).every((value) => value != null) &&
     risk.maxOpenExposureUsd! >= risk.maxOrderUsd!;
-  const accountConfigurationReady =
-    walletValid && Boolean(signerPrivateKey) && Boolean(relayerApiKey) && relayerAddressValid;
   const executionArmRequested = executionArm === "true";
 
   const blockers: string[] = [];
   if (!publicApi.reachable) blockers.push("Official public SDK probe is not reachable.");
-  if (!walletAddress) blockers.push("Account wallet address is not configured.");
-  else if (!walletValid) blockers.push("Account wallet address is not a valid EVM address.");
-  if (!signerPrivateKey) blockers.push("Dedicated signer is not configured.");
-  if (!relayerApiKey) blockers.push("Relayer API key is not configured.");
-  if (!relayerApiKeyAddress) blockers.push("Relayer API key address is not configured.");
-  else if (!relayerAddressValid) blockers.push("Relayer API key address is not valid.");
-  if (!riskControlsReady) blockers.push("All four explicit risk limits are not valid.");
+  if (builderAddress && !builderAddressValid) {
+    blockers.push("Builder address is not a valid EVM address.");
+  }
+  if (builderCode && !builderCodeValid) blockers.push("Builder code is not a valid bytes32 code.");
+  if (builderCredentialCount > 0 && !builderCredentialsReady) {
+    blockers.push("Builder API key, secret, and passphrase must be configured together.");
+  }
+  if (!riskControlsReady) blockers.push("All four platform-wide risk ceilings are not valid.");
   blockers.push("Authenticated client and user-stream reconciliation are not implemented yet.");
   blockers.push("No order submission or cancellation route exists.");
   if (!executionArmRequested) blockers.push("Live execution arm is off.");
@@ -188,28 +189,30 @@ export async function polymarketConnectorReadiness(
     ...POLYMARKET_CONNECTOR_READINESS,
     checkedAtMs: nowMs,
     phase:
-      accountConfigurationReady && riskControlsReady
+      publicApi.reachable && riskControlsReady
         ? "configured-locked"
         : publicApi.reachable
           ? "public-connected"
           : "public-disconnected",
     publicApi,
-    account: {
-      walletConfigured: Boolean(walletAddress),
-      walletValid,
-      walletMasked: maskAddress(walletAddress),
-      signerConfigured: Boolean(signerPrivateKey),
-      relayerApiKeyConfigured: Boolean(relayerApiKey),
-      relayerApiKeyAddressConfigured: Boolean(relayerApiKeyAddress),
-      relayerApiKeyAddressValid: relayerAddressValid,
-      relayerApiKeyAddressMasked: maskAddress(relayerApiKeyAddress),
+    system: {
       polygonRpcConfigured: Boolean(polygonRpcUrl),
-      configurationReady: accountConfigurationReady,
+      riskCeilingsReady: riskControlsReady,
+      configurationReady: publicApi.reachable && riskControlsReady,
     },
-    attribution: {
+    builder: {
+      addressConfigured: Boolean(builderAddress),
+      addressValid: builderAddressValid,
+      addressMasked: maskAddress(builderAddress),
       builderCodeConfigured: Boolean(builderCode),
       builderCodeValid,
-      requiredForExecution: false,
+      apiKeyConfigured: Boolean(builderApiKey),
+      apiSecretConfigured: Boolean(builderApiSecret),
+      apiPassphraseConfigured: Boolean(builderApiPassphrase),
+      credentialsReady: builderCredentialsReady,
+      partiallyConfigured: builderCredentialCount > 0 && !builderCredentialsReady,
+      requiredForExistingUserAccounts: false,
+      requiredForBuilderManagedProvisioning: true,
     },
     risk: {
       ...risk,

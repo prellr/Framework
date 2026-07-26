@@ -4,6 +4,34 @@ All notable Alchemy changes are recorded here. Versions follow Semantic Versioni
 application and its research interfaces; research contracts retain their own immutable version
 identifiers.
 
+## [0.4.0] - 2026-07-25
+
+### Added
+
+- Per-user Polymarket account registry with support for multiple independently labeled wallets,
+  one explicit default account, and per-account risk budgets.
+- Encrypted-at-rest signer and Relayer credentials with masked, secret-free browser projections.
+- Dedicated **Settings → Polymarket accounts** workflow for personal accounts and
+  **Admin → Settings → Polymarket system connector** for Builder credentials, shared
+  infrastructure, platform ceilings, and the global kill switch.
+
+### Changed
+
+- Split Polymarket configuration into a platform-owned Builder plane and a user-owned wallet plane.
+- Modeled Deposit, legacy proxy, Safe, and direct EOA wallets while reserving Builder-managed
+  account provisioning for a later authenticated connector milestone.
+- Execution & Capital now reports both system-connector readiness and the current user's saved
+  default account without exposing credentials.
+
+### Safety
+
+- Personal account routes require an authenticated human session, scope every read and mutation to
+  the current user, and omit secrets from responses and audit records.
+- Account limits fail closed until all administrator ceilings are configured and may never exceed
+  those ceilings.
+- No account verification, authentication, order submission, cancellation, or live execution route
+  was added.
+
 ## [0.3.0] - 2026-07-25
 
 ### Added

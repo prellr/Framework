@@ -20,6 +20,7 @@ import { kbRouter } from "../routers/kb.ts";
 import { polymarketRouter } from "../routers/polymarket.ts";
 import { crucibleRouter } from "../routers/crucible.ts";
 import { formulaLabRouter } from "../routers/formula-lab.ts";
+import { polymarketAccountsRouter } from "../routers/polymarket-accounts.ts";
 import { publicProcedure } from "./middleware.ts";
 
 export const appRouter = t.router({
@@ -42,6 +43,7 @@ export const appRouter = t.router({
   leaderboard: leaderboardRouter,
   kb: kbRouter,
   polymarket: polymarketRouter,
+  polymarketAccounts: polymarketAccountsRouter,
   crucible: crucibleRouter,
   formulaLab: formulaLabRouter,
 });

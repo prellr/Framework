@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
+import { PolymarketSystemSettings } from "@/pages/settings/PolymarketSystemSettings";
 import { TZ_OPTIONS, VIEWER_TZ, tzLabel, effectiveTz } from "@/lib/tz";
 import {
   nextSortState,
@@ -74,7 +75,10 @@ export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
       ) : tab === "login-history" ? (
         <LoginHistoryTab />
       ) : (
-        <RuntimeSettingsPanel />
+        <div className="space-y-8">
+          <PolymarketSystemSettings />
+          <RuntimeSettingsPanel />
+        </div>
       )}
     </div>
   );

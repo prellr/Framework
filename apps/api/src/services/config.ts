@@ -21,7 +21,7 @@ import { isSealed, openFromString, sealToString } from "./crypto.ts";
  * is excluded by definition — it's the key that protects the others, so it lives in the environment
  * only and must never be written to the table it secures.
  */
-const SECRET_RE = /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|RPC_URL/i;
+const SECRET_RE = /KEY|SECRET|TOKEN|PASSWORD|PASSPHRASE|CREDENTIAL|RPC_URL/i;
 const PUBLIC_IDENTIFIER_RE = /(?:ADDRESS|PUBLIC_KEY)$/i;
 export const isSecretSetting = (key: string) =>
   key !== "JESTER_MASTER_KEY" && !PUBLIC_IDENTIFIER_RE.test(key) && SECRET_RE.test(key);

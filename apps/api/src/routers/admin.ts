@@ -36,9 +36,9 @@ const SETTING_GROUPS: { id: string; name: string; description: string; keys: str
   },
   {
     id: "polymarket",
-    name: "Polymarket Up/Down",
+    name: "Polymarket system connector",
     description:
-      "Research collection plus the locked Polymarket connector control plane. Wallet, signer, and relayer values are prerequisites for a future authenticated client; credential-style values are encrypted at rest and never returned in plaintext. POLYMARKET_LIVE_EXECUTION_ENABLED is a reserved arm only: no submission or cancellation route exists yet.",
+      "Admin-owned market-data collection, Builder identity, shared infrastructure, and platform-wide risk ceilings. User wallets and signer credentials are stored separately per user. The live arm remains inert because no order route exists.",
     keys: [
       "polymarket_book_capture_enabled",
       "signal_gauge_logger_enabled",
@@ -46,11 +46,11 @@ const SETTING_GROUPS: { id: string; name: string; description: string; keys: str
       "paper_floor_enabled",
       "v1_signal_logger_enabled",
       "v1_signal_pairs",
-      "POLYMARKET_WALLET_ADDRESS",
-      "POLYMARKET_SIGNER_PRIVATE_KEY",
-      "POLYMARKET_RELAYER_API_KEY",
-      "POLYMARKET_RELAYER_API_KEY_ADDRESS",
+      "POLYMARKET_BUILDER_ADDRESS",
       "POLYMARKET_BUILDER_CODE",
+      "POLYMARKET_BUILDER_API_KEY",
+      "POLYMARKET_BUILDER_API_SECRET",
+      "POLYMARKET_BUILDER_API_PASSPHRASE",
       "POLYGON_RPC_URL",
       "POLYMARKET_MAX_ORDER_USD",
       "POLYMARKET_MAX_OPEN_EXPOSURE_USD",

@@ -8,17 +8,18 @@ import {
 import { isSecretSetting } from "./config.ts";
 
 const address = "0x1111111111111111111111111111111111111111";
-const secret = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const relayerKey = "relayer-key-that-must-never-leave-the-server";
+const builderKey = "builder-key-that-must-never-leave-the-server";
+const builderSecret = "builder-secret-that-must-never-leave-the-server";
+const builderPassphrase = "builder-passphrase-that-must-never-leave-the-server";
 const builderCode = `0x${"b".repeat(64)}`;
 
 test("connector readiness exposes a public connection without inventing an execution path", async () => {
   const settings = new Map<string, string>([
-    ["POLYMARKET_WALLET_ADDRESS", address],
-    ["POLYMARKET_SIGNER_PRIVATE_KEY", secret],
-    ["POLYMARKET_RELAYER_API_KEY", relayerKey],
-    ["POLYMARKET_RELAYER_API_KEY_ADDRESS", address],
+    ["POLYMARKET_BUILDER_ADDRESS", address],
     ["POLYMARKET_BUILDER_CODE", builderCode],
+    ["POLYMARKET_BUILDER_API_KEY", builderKey],
+    ["POLYMARKET_BUILDER_API_SECRET", builderSecret],
+    ["POLYMARKET_BUILDER_API_PASSPHRASE", builderPassphrase],
     ["POLYGON_RPC_URL", "https://polygon.example.invalid"],
     ["POLYMARKET_LIVE_EXECUTION_ENABLED", "true"],
     ["POLYMARKET_MAX_ORDER_USD", "5"],
@@ -41,25 +42,29 @@ test("connector readiness exposes a public connection without inventing an execu
 
   assert.equal(status.phase, "configured-locked");
   assert.equal(status.publicApi.reachable, true);
-  assert.equal(status.account.configurationReady, true);
-  assert.equal(status.attribution.builderCodeConfigured, true);
-  assert.equal(status.attribution.builderCodeValid, true);
-  assert.equal(status.attribution.requiredForExecution, false);
+  assert.equal(status.system.configurationReady, true);
+  assert.equal(status.builder.builderCodeConfigured, true);
+  assert.equal(status.builder.builderCodeValid, true);
+  assert.equal(status.builder.credentialsReady, true);
+  assert.equal(status.builder.requiredForExistingUserAccounts, false);
+  assert.equal(status.builder.requiredForBuilderManagedProvisioning, true);
   assert.equal(status.risk.controlsReady, true);
   assert.equal(status.execution.armRequested, true);
   assert.equal(status.execution.routeAvailable, false);
   assert.equal(status.execution.enabled, false);
   assert.equal(status.lifecycle.orderSubmission, false);
   assert.equal(status.lifecycle.cancellation, false);
-  assert.equal(status.account.walletMasked, "0x1111…1111");
+  assert.equal(status.builder.addressMasked, "0x1111…1111");
   const serialized = JSON.stringify(status);
-  assert.doesNotMatch(serialized, new RegExp(secret));
-  assert.doesNotMatch(serialized, new RegExp(relayerKey));
+  assert.doesNotMatch(serialized, new RegExp(builderKey));
+  assert.doesNotMatch(serialized, new RegExp(builderSecret));
+  assert.doesNotMatch(serialized, new RegExp(builderPassphrase));
 });
 
 test("connector readiness fails closed around public and malformed configuration", async () => {
   const settings = new Map<string, string>([
-    ["POLYMARKET_WALLET_ADDRESS", "not-an-address"],
+    ["POLYMARKET_BUILDER_ADDRESS", "not-an-address"],
+    ["POLYMARKET_BUILDER_API_KEY", "partial-key"],
     ["POLYMARKET_MAX_ORDER_USD", "25"],
     ["POLYMARKET_MAX_OPEN_EXPOSURE_USD", "5"],
     ["POLYMARKET_DAILY_LOSS_LIMIT_USD", "-1"],
@@ -79,7 +84,8 @@ test("connector readiness fails closed around public and malformed configuration
   );
 
   assert.equal(status.phase, "public-disconnected");
-  assert.equal(status.account.configurationReady, false);
+  assert.equal(status.system.configurationReady, false);
+  assert.equal(status.builder.partiallyConfigured, true);
   assert.equal(status.risk.controlsReady, false);
   assert.equal(status.execution.enabled, false);
   assert.ok(status.blockers.length >= 6);
@@ -107,10 +113,10 @@ test("readiness implementation is bounded to the official public SDK", async () 
 });
 
 test("connector credentials and RPC endpoints remain write-only while public addresses remain visible", () => {
-  assert.equal(isSecretSetting("POLYMARKET_SIGNER_PRIVATE_KEY"), true);
-  assert.equal(isSecretSetting("POLYMARKET_RELAYER_API_KEY"), true);
+  assert.equal(isSecretSetting("POLYMARKET_BUILDER_API_KEY"), true);
+  assert.equal(isSecretSetting("POLYMARKET_BUILDER_API_SECRET"), true);
+  assert.equal(isSecretSetting("POLYMARKET_BUILDER_API_PASSPHRASE"), true);
   assert.equal(isSecretSetting("POLYGON_RPC_URL"), true);
-  assert.equal(isSecretSetting("POLYMARKET_WALLET_ADDRESS"), false);
-  assert.equal(isSecretSetting("POLYMARKET_RELAYER_API_KEY_ADDRESS"), false);
+  assert.equal(isSecretSetting("POLYMARKET_BUILDER_ADDRESS"), false);
   assert.equal(isSecretSetting("POLYMARKET_BUILDER_CODE"), false);
 });

@@ -465,6 +465,10 @@ export function PolymarketExecutionCapital() {
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
+  const polymarketAccounts = trpc.polymarketAccounts.list.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
   const independence = trpc.polymarket.strategyIndependence.useQuery(undefined, {
     staleTime: 60_000,
     refetchInterval: 120_000,
@@ -513,6 +517,8 @@ export function PolymarketExecutionCapital() {
   const markoutReport = markoutData?.report;
   const shadowData = shadow.data;
   const connectorData = connector.data;
+  const accountData = polymarketAccounts.data;
+  const defaultAccount = accountData?.accounts.find((account) => account.isDefault);
   const independenceData = independence.data;
   const capacityReady = capacityData?.readyForCapacityDistribution ?? false;
 
@@ -590,9 +596,9 @@ export function PolymarketExecutionCapital() {
             <div className="bg-background/70 text-muted-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
               <Lock className="h-3.5 w-3.5" />
               {connectorData?.phase === "configured-locked"
-                ? "Credentials configured · execution locked"
+                ? "System configured · execution locked"
                 : connectorData?.phase === "public-connected"
-                  ? "Public connected · account not configured"
+                  ? "Public connected · system ceilings incomplete"
                   : "Public probe unavailable · execution locked"}
             </div>
           </div>
@@ -618,14 +624,14 @@ export function PolymarketExecutionCapital() {
                   tone={connectorData.lifecycle.feeAwareShadowPlans ? "good" : "warning"}
                 />
                 <MetricTile
-                  label="Account prerequisites"
-                  value={connectorData.account.configurationReady ? "Ready" : "Incomplete"}
+                  label="User wallet accounts"
+                  value={`${accountData?.accounts.length ?? 0} saved`}
                   note={
-                    connectorData.account.walletMasked
-                      ? `wallet ${connectorData.account.walletMasked}`
-                      : "wallet, signer, and relayer are required"
+                    defaultAccount
+                      ? `default ${defaultAccount.label} · ${defaultAccount.walletMasked}`
+                      : "add and select a default account in Settings"
                   }
-                  tone={connectorData.account.configurationReady ? "good" : "warning"}
+                  tone={defaultAccount ? "good" : "warning"}
                 />
                 <MetricTile
                   label="Order lifecycle"
@@ -639,14 +645,14 @@ export function PolymarketExecutionCapital() {
                 <div className="rounded-xl border p-4">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <KeyRound className="h-4 w-4 text-violet-400" />
-                    Account and risk controls
+                    System and account controls
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-xs sm:grid-cols-4">
                     {[
-                      ["Wallet", connectorData.account.walletValid],
-                      ["Signer", connectorData.account.signerConfigured],
-                      ["Relayer key", connectorData.account.relayerApiKeyConfigured],
-                      ["Relayer address", connectorData.account.relayerApiKeyAddressValid],
+                      ["Default wallet", Boolean(defaultAccount)],
+                      ["Signer", Boolean(defaultAccount?.signerConfigured)],
+                      ["Relayer key", Boolean(defaultAccount?.relayerApiKeyConfigured)],
+                      ["Builder set", connectorData.builder.credentialsReady],
                       ["Max order", connectorData.risk.maxOrderUsd != null],
                       ["Exposure cap", connectorData.risk.maxOpenExposureUsd != null],
                       ["Daily loss cap", connectorData.risk.dailyLossLimitUsd != null],
