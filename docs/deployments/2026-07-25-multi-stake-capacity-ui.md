@@ -16,6 +16,14 @@ The `$10` and `$20` views do not claim that deeper liquidity was available at th
 same price. They leave decisions, fill asks, win rate, paper stake, verdict gates,
 and execution unchanged.
 
+The Execution & Capital cross-strategy diagnostic map uses the same selector and
+contract. Its funds value is applied independently to every strategy intent:
+
+- `$5` shows each strategy's captured, fee-adjusted book-walk result;
+- `$10` and `$20` linearly scale dollar net and net per bet by 2× and 4×;
+- decision counts and win rates never scale; and
+- modeled values do not replay deeper liquidity, slippage, or capacity.
+
 ## Capacity disclosure
 
 Strategy detail pages show the current status of

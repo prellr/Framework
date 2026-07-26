@@ -21,6 +21,7 @@ type PeriodKey = "24h" | "3d" | "7d" | "30d" | "all";
 type HorizonKey = "all" | 5 | 15;
 type TrendMetric = "pnl" | "netPerBet" | "winRate" | "n";
 type DimensionKey = "ask" | "macro" | "day" | "freshness";
+type StakeUsd = 5 | 10 | 20;
 
 const ASK_BUCKETS = ["<35¢", "35–49¢", "50–64¢", "65¢+"] as const;
 const ASK_COLORS: Record<string, string> = {
@@ -305,18 +306,21 @@ const dimensionColumns = (dimension: DimensionKey, rows: SegmentRow[]) => {
   return [...new Set(rows.map((row) => row.key))].sort();
 };
 
-const displayMetric = (row: SegmentRow | undefined, metric: TrendMetric) => {
+const scaledDollarValue = (value: number | null | undefined, stakeUsd: StakeUsd) =>
+  value == null ? null : value * (stakeUsd / 5);
+
+const displayMetric = (row: SegmentRow | undefined, metric: TrendMetric, stakeUsd: StakeUsd) => {
   if (!row) return "—";
-  if (metric === "pnl") return signedMoney(row.pnl);
-  if (metric === "netPerBet") return signedMoney(row.netPerBet);
+  if (metric === "pnl") return signedMoney(scaledDollarValue(row.pnl, stakeUsd));
+  if (metric === "netPerBet") return signedMoney(scaledDollarValue(row.netPerBet, stakeUsd));
   if (metric === "winRate") return pct(row.winRate, 0);
   return row.n.toLocaleString();
 };
 
-const heatValue = (row: SegmentRow | undefined, metric: TrendMetric) => {
+const heatValue = (row: SegmentRow | undefined, metric: TrendMetric, stakeUsd: StakeUsd) => {
   if (!row) return null;
-  if (metric === "pnl") return row.pnl;
-  if (metric === "netPerBet") return row.netPerBet;
+  if (metric === "pnl") return scaledDollarValue(row.pnl, stakeUsd);
+  if (metric === "netPerBet") return scaledDollarValue(row.netPerBet, stakeUsd);
   if (metric === "winRate") return row.winRate == null ? null : row.winRate - 0.5;
   return row.n;
 };
@@ -325,10 +329,12 @@ function SegmentMatrix({
   rows,
   dimension,
   metric,
+  stakeUsd,
 }: {
   rows: SegmentRow[];
   dimension: DimensionKey;
   metric: TrendMetric;
+  stakeUsd: StakeUsd;
 }) {
   const selected = rows.filter((row) => row.dimension === dimension);
   const columns = dimensionColumns(dimension, selected);
@@ -343,7 +349,10 @@ function SegmentMatrix({
       .reduce((sum, row) => sum + row.pnl, 0);
     return rightNet - leftNet || left.name.localeCompare(right.name);
   });
-  const maxAbs = Math.max(1e-9, ...selected.map((row) => Math.abs(heatValue(row, metric) ?? 0)));
+  const maxAbs = Math.max(
+    1e-9,
+    ...selected.map((row) => Math.abs(heatValue(row, metric, stakeUsd) ?? 0)),
+  );
 
   if (!cohorts.length) {
     return (
@@ -386,7 +395,7 @@ function SegmentMatrix({
                     row.horizonMin === cohort.horizonMin &&
                     row.key === column,
                 );
-                const value = heatValue(cell, metric);
+                const value = heatValue(cell, metric, stakeUsd);
                 const signed = metric !== "n";
                 const positive = value != null && value >= 0;
                 const intensity =
@@ -419,12 +428,12 @@ function SegmentMatrix({
                     title={
                       cell
                         ? `${cell.n} decisions · ${pct(cell.winRate, 0)} WR · ${signedMoney(
-                            cell.pnl,
-                          )} RAW · ask ${pct(cell.avgAsk, 1)}`
+                            scaledDollarValue(cell.pnl, stakeUsd),
+                          )} RAW at $${stakeUsd} · ask ${pct(cell.avgAsk, 1)}`
                         : "No graded decisions"
                     }
                   >
-                    {displayMetric(cell, metric)}
+                    {displayMetric(cell, metric, stakeUsd)}
                   </td>
                 );
               })}
@@ -443,6 +452,7 @@ export function PolymarketExecutionCapital() {
   const [trendMetric, setTrendMetric] = useState<TrendMetric>("pnl");
   const [dimension, setDimension] = useState<DimensionKey>("ask");
   const [matrixMetric, setMatrixMetric] = useState<TrendMetric>("netPerBet");
+  const [matrixStakeUsd, setMatrixStakeUsd] = useState<StakeUsd>(5);
   const [hiddenBots, setHiddenBots] = useState<Set<string>>(() => new Set());
 
   const execution = trpc.polymarket.executionCapital.useQuery(
@@ -843,7 +853,7 @@ export function PolymarketExecutionCapital() {
               <p className="text-muted-foreground mt-1 text-xs leading-5">
                 Compare every visible strategy × timeframe under the same ask, macro, calendar, or
                 freshness slices. Cells remain retrospective diagnostics and cannot alter a frozen
-                gate.
+                gate. Funds are applied independently to every strategy intent.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -867,15 +877,36 @@ export function PolymarketExecutionCapital() {
                   { value: "n", label: "N" },
                 ]}
               />
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">
+                  Funds / strategy
+                </span>
+                <Toggle
+                  value={matrixStakeUsd}
+                  onChange={setMatrixStakeUsd}
+                  options={[
+                    { value: 5, label: "$5" },
+                    { value: 10, label: "$10" },
+                    { value: 20, label: "$20" },
+                  ]}
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-5">
+        <CardContent className="space-y-3 pt-5">
           <SegmentMatrix
             rows={visibleSegments as SegmentRow[]}
             dimension={dimension}
             metric={matrixMetric}
+            stakeUsd={matrixStakeUsd}
           />
+          <p className="text-muted-foreground text-[11px] leading-5">
+            {matrixStakeUsd === 5
+              ? "$5 uses the recorded fee-adjusted book-walk result for each strategy decision."
+              : `$${matrixStakeUsd} is a ${(matrixStakeUsd / 5).toFixed(0)}× linear exposure model of each strategy's recorded $5 result. It does not replay deeper liquidity, slippage, or capacity.`}{" "}
+            Win rate and decision count never scale with funds.
+          </p>
         </CardContent>
       </Card>
 

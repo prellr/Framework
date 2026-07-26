@@ -2,14 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const service = readFileSync(
-  new URL("./paper-execution-capital.ts", import.meta.url),
-  "utf8",
-);
-const router = readFileSync(
-  new URL("../routers/polymarket.ts", import.meta.url),
-  "utf8",
-);
+const service = readFileSync(new URL("./paper-execution-capital.ts", import.meta.url), "utf8");
+const router = readFileSync(new URL("../routers/polymarket.ts", import.meta.url), "utf8");
 const page = readFileSync(
   new URL("../../../web/src/pages/polymarket/PolymarketExecutionCapital.tsx", import.meta.url),
   "utf8",
@@ -23,7 +17,10 @@ test("execution and capital projection remains read-only and paper-only", () => 
 });
 
 test("venue-cost evidence deduplicates shared strategy quote snapshots", () => {
-  assert.match(service, /quote_samples as \([\s\S]*?select distinct[\s\S]*?condition_id,[\s\S]*?side/);
+  assert.match(
+    service,
+    /quote_samples as \([\s\S]*?select distinct[\s\S]*?condition_id,[\s\S]*?side/,
+  );
   assert.match(service, /Gross book-walk VWAP minus the captured best ask/);
   assert.match(service, /Fee-adjusted effective VWAP minus gross book-walk VWAP/);
 });
@@ -38,6 +35,10 @@ test("capital comparison preserves opposed contracts and exposes both peak model
 test("the dedicated view exposes ask history, cross-strategy segments, and no profit stress", () => {
   assert.match(page, /Entry-ask economics over time/);
   assert.match(page, /Cross-strategy diagnostic map/);
+  assert.match(page, /Funds \/ strategy/);
+  assert.match(page, /recorded fee-adjusted book-walk result/);
+  assert.match(page, /linear exposure model/);
+  assert.match(page, /Win rate and decision count never scale with funds/);
   assert.match(page, /Capital stacking/);
   assert.match(page, /Stake capacity/);
   assert.doesNotMatch(page, /profit stress|Stress −36%/i);
