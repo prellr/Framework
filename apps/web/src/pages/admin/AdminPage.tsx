@@ -507,7 +507,9 @@ export function RuntimeSettingsPanel({
   });
 
   const dirty = Object.keys(edits).length > 0;
-  const groups = settings.data?.groups.filter((group) => !groupIds || groupIds.includes(group.id));
+  const groups = settings.data?.groups.filter((group) =>
+    groupIds ? groupIds.includes(group.id) : group.id !== "polymarket",
+  );
 
   return (
     <div className="space-y-6">

@@ -10,6 +10,7 @@ import { isSecretSetting } from "./config.ts";
 const address = "0x1111111111111111111111111111111111111111";
 const secret = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const relayerKey = "relayer-key-that-must-never-leave-the-server";
+const builderCode = `0x${"b".repeat(64)}`;
 
 test("connector readiness exposes a public connection without inventing an execution path", async () => {
   const settings = new Map<string, string>([
@@ -17,6 +18,7 @@ test("connector readiness exposes a public connection without inventing an execu
     ["POLYMARKET_SIGNER_PRIVATE_KEY", secret],
     ["POLYMARKET_RELAYER_API_KEY", relayerKey],
     ["POLYMARKET_RELAYER_API_KEY_ADDRESS", address],
+    ["POLYMARKET_BUILDER_CODE", builderCode],
     ["POLYGON_RPC_URL", "https://polygon.example.invalid"],
     ["POLYMARKET_LIVE_EXECUTION_ENABLED", "true"],
     ["POLYMARKET_MAX_ORDER_USD", "5"],
@@ -40,6 +42,9 @@ test("connector readiness exposes a public connection without inventing an execu
   assert.equal(status.phase, "configured-locked");
   assert.equal(status.publicApi.reachable, true);
   assert.equal(status.account.configurationReady, true);
+  assert.equal(status.attribution.builderCodeConfigured, true);
+  assert.equal(status.attribution.builderCodeValid, true);
+  assert.equal(status.attribution.requiredForExecution, false);
   assert.equal(status.risk.controlsReady, true);
   assert.equal(status.execution.armRequested, true);
   assert.equal(status.execution.routeAvailable, false);
@@ -107,4 +112,5 @@ test("connector credentials and RPC endpoints remain write-only while public add
   assert.equal(isSecretSetting("POLYGON_RPC_URL"), true);
   assert.equal(isSecretSetting("POLYMARKET_WALLET_ADDRESS"), false);
   assert.equal(isSecretSetting("POLYMARKET_RELAYER_API_KEY_ADDRESS"), false);
+  assert.equal(isSecretSetting("POLYMARKET_BUILDER_CODE"), false);
 });

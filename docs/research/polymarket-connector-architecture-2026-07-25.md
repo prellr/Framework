@@ -67,6 +67,25 @@ Source: [Wallets and Authentication](https://docs.polymarket.com/trading/wallets
 Alchemy should use a dedicated, tightly funded signer and account wallet. It should not reuse a
 general-purpose treasury or personal wallet.
 
+## Builder attribution decision
+
+Alchemy has a Polymarket Builder profile, but Builder configuration is not a prerequisite for
+trading its own account. The public `builderCode` is an optional order-attribution value: attaching
+it lets Polymarket credit matched volume to Alchemy. It does not authenticate the CLOB account,
+replace the wallet signer, or enable an order route.
+
+The connector therefore stores `POLYMARKET_BUILDER_CODE` as an optional public bytes32 setting and
+keeps it outside account and risk readiness. We will attach it only when order submission is
+implemented. The Builder address is not the funded trading wallet. Builder API keys are not
+required for this internal single-account milestone; revisit them if Alchemy becomes a platform
+that routes orders for other users.
+
+Sources:
+
+- [Builder Program overview](https://docs.polymarket.com/builders/overview)
+- [Order attribution](https://docs.polymarket.com/trading/orders/attribution)
+- [Builder API keys](https://docs.polymarket.com/builders/api-keys)
+
 ## Planned runtime shape
 
 ```text

@@ -19,6 +19,7 @@ export const POLYMARKET_CONNECTOR_SETTING_KEYS = {
   signerPrivateKey: "POLYMARKET_SIGNER_PRIVATE_KEY",
   relayerApiKey: "POLYMARKET_RELAYER_API_KEY",
   relayerApiKeyAddress: "POLYMARKET_RELAYER_API_KEY_ADDRESS",
+  builderCode: "POLYMARKET_BUILDER_CODE",
   polygonRpcUrl: "POLYGON_RPC_URL",
   liveExecutionEnabled: "POLYMARKET_LIVE_EXECUTION_ENABLED",
   maxOrderUsd: "POLYMARKET_MAX_ORDER_USD",
@@ -48,6 +49,7 @@ interface CachedProbe {
 let publicProbeCache: CachedProbe | null = null;
 
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const BYTES_32 = /^0x[0-9a-fA-F]{64}$/;
 
 function maskAddress(value: string | undefined): string | null {
   if (!value || !EVM_ADDRESS.test(value)) return null;
@@ -129,6 +131,7 @@ export async function polymarketConnectorReadiness(
     signerPrivateKey,
     relayerApiKey,
     relayerApiKeyAddress,
+    builderCode,
     polygonRpcUrl,
     executionArm,
     maxOrderUsdRaw,
@@ -141,6 +144,7 @@ export async function polymarketConnectorReadiness(
     readSetting(keys.signerPrivateKey),
     readSetting(keys.relayerApiKey),
     readSetting(keys.relayerApiKeyAddress),
+    readSetting(keys.builderCode),
     readSetting(keys.polygonRpcUrl),
     readSetting(keys.liveExecutionEnabled),
     readSetting(keys.maxOrderUsd),
@@ -153,6 +157,7 @@ export async function polymarketConnectorReadiness(
   const relayerAddressValid = Boolean(
     relayerApiKeyAddress && EVM_ADDRESS.test(relayerApiKeyAddress),
   );
+  const builderCodeValid = Boolean(builderCode && BYTES_32.test(builderCode));
   const risk = {
     maxOrderUsd: positiveNumber(maxOrderUsdRaw),
     maxOpenExposureUsd: positiveNumber(maxOpenExposureUsdRaw),
@@ -200,6 +205,11 @@ export async function polymarketConnectorReadiness(
       relayerApiKeyAddressMasked: maskAddress(relayerApiKeyAddress),
       polygonRpcConfigured: Boolean(polygonRpcUrl),
       configurationReady: accountConfigurationReady,
+    },
+    attribution: {
+      builderCodeConfigured: Boolean(builderCode),
+      builderCodeValid,
+      requiredForExecution: false,
     },
     risk: {
       ...risk,
