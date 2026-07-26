@@ -9,10 +9,11 @@ import { createHash } from "node:crypto";
 import { PAPER_FAMILYWISE_GATE } from "./paper-familywise-gate.ts";
 import {
   RESOLUTION_SOURCE_BASIS_FEATURE_CUT_FREEZE,
+  assertResolutionSourceBasisFeatureCutEnvelope,
   nextResolutionSourceBasisStrategyBoundary,
   type ResolutionSourceBasisFeatureCutEnvelope,
 } from "./resolution-source-basis-feature-cut-freeze.ts";
-import type { LeadLagResult } from "./lead-lag-analysis.ts";
+import { LEAD_LAG_REPORT, type LeadLagResult } from "./lead-lag-analysis.ts";
 
 const PAIRS = ["BNB-USD", "BTC-USD", "DOGE-USD", "ETH-USD", "SOL-USD", "XRP-USD"] as const;
 const HORIZONS = [5, 15] as const;
@@ -136,6 +137,11 @@ export interface ResolutionBasisCatchupPairManifestEnvelope {
   artifact: ResolutionBasisCatchupPairManifest;
 }
 
+export const RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_START =
+  "<!-- RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_V1_START -->";
+export const RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_END =
+  "<!-- RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_V1_END -->";
+
 export interface ResolutionBasisCatchupObservation {
   pair: ResolutionBasisCatchupPair;
   horizonMin: ResolutionBasisCatchupHorizon;
@@ -184,6 +190,35 @@ function manifestDigest(artifact: ResolutionBasisCatchupPairManifest): string {
   return createHash("sha256").update(JSON.stringify(artifact)).digest("hex");
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+function assertExactKeys(value: Record<string, unknown>, expected: readonly string[], label: string) {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  if (
+    actual.length !== sortedExpected.length
+    || actual.some((key, index) => key !== sortedExpected[index])
+  ) {
+    throw new Error(`invalid resolution-basis pair manifest ${label} keys`);
+  }
+}
+
+function assertCi(value: unknown, label: string): asserts value is [number | null, number | null] {
+  if (!Array.isArray(value) || value.length !== 2) {
+    throw new Error(`invalid resolution-basis pair manifest ${label}`);
+  }
+  const [lower, upper] = value;
+  if (
+    (lower !== null && !Number.isFinite(lower))
+    || (upper !== null && !Number.isFinite(upper))
+    || ((lower === null) !== (upper === null))
+    || (lower !== null && upper !== null && lower > upper)
+  ) {
+    throw new Error(`invalid resolution-basis pair manifest ${label}`);
+  }
+}
+
 function asPair(value: string): ResolutionBasisCatchupPair {
   if (!PAIRS.includes(value as ResolutionBasisCatchupPair)) {
     throw new Error(`resolution-basis pair manifest contains out-of-scope pair: ${value}`);
@@ -202,6 +237,7 @@ export function buildResolutionBasisCatchupPairManifest(input: {
   leadLagResults: LeadLagResult[];
   frozenAtMs: number;
 }): ResolutionBasisCatchupPairManifestEnvelope {
+  assertResolutionSourceBasisFeatureCutEnvelope(input.featureCuts);
   if (!Number.isSafeInteger(input.frozenAtMs) || input.frozenAtMs <= 0) {
     throw new Error("invalid resolution-basis pair manifest freeze timestamp");
   }
@@ -251,23 +287,171 @@ export function buildResolutionBasisCatchupPairManifest(input: {
       };
     }),
   };
-  return { sha256: manifestDigest(artifact), artifact };
+  const envelope = { sha256: manifestDigest(artifact), artifact };
+  assertResolutionBasisCatchupPairManifestEnvelope(envelope, input.featureCuts);
+  return envelope;
 }
 
 export function resolutionBasisCatchupPairManifestValid(
   envelope: ResolutionBasisCatchupPairManifestEnvelope,
   featureCuts: ResolutionSourceBasisFeatureCutEnvelope,
 ): boolean {
-  return (
-    envelope.artifact.version ===
-      RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.prerequisiteVersions.pairManifest &&
-    envelope.artifact.prerequisiteVenueTapeVersion ===
-      RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.prerequisiteVersions.venueTape &&
-    envelope.artifact.featureCutsVersion ===
-      RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.prerequisiteVersions.featureCuts &&
-    envelope.artifact.featureCutsSha256 === featureCuts.sha256 &&
-    envelope.sha256 === manifestDigest(envelope.artifact)
+  try {
+    assertResolutionBasisCatchupPairManifestEnvelope(envelope, featureCuts);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fail-closed validation for the persisted pair manifest.
+ *
+ * Eligibility is recomputed from the stored fixed-lag confidence bounds after the inherited
+ * readiness floors are checked. A serialized caller therefore cannot choose its own roster.
+ */
+export function assertResolutionBasisCatchupPairManifestEnvelope(
+  value: unknown,
+  featureCuts?: ResolutionSourceBasisFeatureCutEnvelope,
+): asserts value is ResolutionBasisCatchupPairManifestEnvelope {
+  if (!isRecord(value)) {
+    throw new Error("invalid resolution-basis pair manifest envelope");
+  }
+  assertExactKeys(value, ["sha256", "artifact"], "envelope");
+  if (
+    typeof value.sha256 !== "string"
+    || !/^[a-f0-9]{64}$/.test(value.sha256)
+    || !isRecord(value.artifact)
+  ) {
+    throw new Error("invalid resolution-basis pair manifest envelope");
+  }
+  const artifact = value.artifact;
+  const expectedBoundary = Math.max(
+    featureCuts?.artifact.strategyNotBeforeMs ?? 0,
+    nextResolutionSourceBasisStrategyBoundary(Number(artifact.frozenAtMs)),
   );
+  assertExactKeys(
+    artifact,
+    [
+      "version",
+      "prerequisiteVenueTapeVersion",
+      "featureCutsVersion",
+      "featureCutsSha256",
+      "frozenAtMs",
+      "strategyNotBeforeMs",
+      "fixedLagSec",
+      "rows",
+    ],
+    "artifact",
+  );
+  if (
+    artifact.version !== RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.prerequisiteVersions.pairManifest
+    || artifact.prerequisiteVenueTapeVersion
+      !== RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.prerequisiteVersions.venueTape
+    || artifact.featureCutsVersion
+      !== RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.prerequisiteVersions.featureCuts
+    || typeof artifact.featureCutsSha256 !== "string"
+    || !/^[a-f0-9]{64}$/.test(artifact.featureCutsSha256)
+    || !Number.isSafeInteger(artifact.frozenAtMs)
+    || Number(artifact.frozenAtMs) <= 0
+    || !Number.isSafeInteger(artifact.strategyNotBeforeMs)
+    || artifact.strategyNotBeforeMs !== expectedBoundary
+    || artifact.fixedLagSec !== RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.fixedRule.leadLagSec
+    || !Array.isArray(artifact.rows)
+    || artifact.rows.length !== PAIRS.length
+  ) {
+    throw new Error("invalid resolution-basis pair manifest artifact contract");
+  }
+  if (featureCuts) {
+    assertResolutionSourceBasisFeatureCutEnvelope(featureCuts);
+    if (
+      artifact.featureCutsSha256 !== featureCuts.sha256
+      || Number(artifact.strategyNotBeforeMs) < featureCuts.artifact.strategyNotBeforeMs
+    ) {
+      throw new Error("resolution-basis pair manifest feature-cut binding mismatch");
+    }
+  }
+  for (let index = 0; index < PAIRS.length; index++) {
+    const row: unknown = artifact.rows[index];
+    if (!isRecord(row)) {
+      throw new Error("invalid resolution-basis pair manifest row");
+    }
+    assertExactKeys(
+      row,
+      [
+        "pair",
+        "lagSec",
+        "rows",
+        "spanDays",
+        "blocks",
+        "forwardCi",
+        "differenceCi",
+        "qualified",
+      ],
+      "row",
+    );
+    assertCi(row.forwardCi, `${PAIRS[index]} forward CI`);
+    assertCi(row.differenceCi, `${PAIRS[index]} difference CI`);
+    const inheritedReady =
+      Number.isSafeInteger(row.rows)
+      && Number(row.rows) >= LEAD_LAG_REPORT.minRows
+      && Number.isFinite(row.spanDays)
+      && Number(row.spanDays) >= LEAD_LAG_REPORT.minSpanDays
+      && Number.isSafeInteger(row.blocks)
+      && Number(row.blocks) >= LEAD_LAG_REPORT.minBlocks;
+    const expectedQualified =
+      inheritedReady
+      && row.forwardCi[0] != null
+      && row.forwardCi[0] > 0
+      && row.differenceCi[0] != null
+      && row.differenceCi[0] > 0;
+    if (
+      row.pair !== PAIRS[index]
+      || row.lagSec !== RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN.fixedRule.leadLagSec
+      || !inheritedReady
+      || typeof row.qualified !== "boolean"
+      || row.qualified !== expectedQualified
+    ) {
+      throw new Error("invalid resolution-basis pair manifest roster or eligibility");
+    }
+  }
+  const envelope = value as unknown as ResolutionBasisCatchupPairManifestEnvelope;
+  if (manifestDigest(envelope.artifact) !== envelope.sha256) {
+    throw new Error("resolution-basis pair manifest hash mismatch");
+  }
+}
+
+export function serializeResolutionBasisCatchupPairManifestEnvelope(
+  envelope: ResolutionBasisCatchupPairManifestEnvelope,
+  featureCuts?: ResolutionSourceBasisFeatureCutEnvelope,
+): string {
+  assertResolutionBasisCatchupPairManifestEnvelope(envelope, featureCuts);
+  return [
+    RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_START,
+    "```json",
+    JSON.stringify(envelope, null, 2),
+    "```",
+    RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_END,
+  ].join("\n");
+}
+
+export function parseResolutionBasisCatchupPairManifestEnvelope(
+  body: string,
+  featureCuts?: ResolutionSourceBasisFeatureCutEnvelope,
+): ResolutionBasisCatchupPairManifestEnvelope {
+  const start = body.indexOf(RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_START);
+  const end = body.indexOf(RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_END);
+  if (start < 0 || end <= start) {
+    throw new Error("resolution-basis pair manifest markers missing");
+  }
+  const block = body
+    .slice(start + RESOLUTION_BASIS_CATCHUP_PAIR_MANIFEST_START.length, end)
+    .trim()
+    .replace(/^```json\s*/, "")
+    .replace(/\s*```$/, "");
+  const parsed: unknown = JSON.parse(block);
+  assertResolutionBasisCatchupPairManifestEnvelope(parsed, featureCuts);
+  return parsed;
 }
 
 function featureBucket(

@@ -9,9 +9,11 @@ import {
 import {
   RESOLUTION_SOURCE_BASIS_CATCHUP_PLAN,
   buildResolutionBasisCatchupPairManifest,
+  parseResolutionBasisCatchupPairManifestEnvelope,
   resolutionBasisCatchupDecision,
   resolutionBasisCatchupPairManifestValid,
   resolutionBasisLeadLagSupported,
+  serializeResolutionBasisCatchupPairManifestEnvelope,
   type ResolutionBasisCatchupObservation,
 } from "./resolution-source-basis-catchup-plan.ts";
 
@@ -132,6 +134,30 @@ test("pair eligibility freezes all six fixed-lag rows behind a later hashed boun
   );
 });
 
+test("pair manifest serialization is strict, immutable, and bound to its feature cuts", () => {
+  const serialized = serializeResolutionBasisCatchupPairManifestEnvelope(pairManifest, envelope);
+  assert.deepEqual(
+    parseResolutionBasisCatchupPairManifestEnvelope(serialized, envelope),
+    pairManifest,
+  );
+  assert.throws(
+    () =>
+      parseResolutionBasisCatchupPairManifestEnvelope(
+        serialized.replace(pairManifest.sha256, "0".repeat(64)),
+        envelope,
+      ),
+    /hash mismatch/,
+  );
+  const forged = structuredClone(pairManifest);
+  forged.artifact.rows[0].qualified = false;
+  const forgedBody = serializeResolutionBasisCatchupPairManifestEnvelope(pairManifest, envelope)
+    .replace(JSON.stringify(pairManifest, null, 2), JSON.stringify(forged, null, 2));
+  assert.throws(
+    () => parseResolutionBasisCatchupPairManifestEnvelope(forgedBody, envelope),
+    /roster or eligibility/,
+  );
+});
+
 test("fixed lead-lag support cannot search lags or accept uncertain precedence", () => {
   assert.equal(resolutionBasisLeadLagSupported(leadLag()), true);
   assert.equal(resolutionBasisLeadLagSupported(leadLag({ lagSec: 2 })), false);
@@ -237,5 +263,21 @@ test("basis catch-up plan is disconnected from evidence and execution systems", 
   assert.doesNotMatch(
     recorderSource,
     /\b(?:venuePriceSnapshots|paperTrades|polymarketUpdownScores|resolvedUp|pnlUsd|placeOrder|submitOrder|privateKey|fetch\s*\()/i,
+  );
+  const manifestRecorderSource = readFileSync(
+    new URL(
+      "../scripts/freeze-resolution-basis-catchup-pair-manifest-v1.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(manifestRecorderSource, /for \(const pair of VENUE_REPORT_PAIRS\)/);
+  assert.match(
+    manifestRecorderSource,
+    /row\.lagSec === plan\.fixedRule\.leadLagSec/,
+  );
+  assert.doesNotMatch(
+    manifestRecorderSource,
+    /\b(?:paperTrades|polymarketUpdownScores|resolvedUp|pnlUsd|placeOrder|submitOrder|privateKey|signOrder|fetch\s*\()/i,
   );
 });
