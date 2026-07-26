@@ -1016,8 +1016,9 @@ export function PolymarketUnder35PortfolioPage() {
     { scope, timezone: "America/Chicago", cohortKeys: historyCohortKeys, assets },
     {
       enabled: Boolean(data && historyCohortKeys.length),
-      staleTime: 120_000,
-      refetchInterval: 300_000,
+      staleTime: 10_000,
+      refetchInterval: 20_000,
+      refetchOnWindowFocus: "always",
     },
   );
   const selectedTrades = (historyQuery.data?.trades ?? []).filter(

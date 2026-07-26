@@ -32,6 +32,7 @@ const UNDER_35_MAX_ASK = 0.35;
 const CAPTURED_STAKE_USD = 5;
 const HORIZONS = [5, 15] as const;
 const CACHE_TTL_MS = 30_000;
+const TRADE_HISTORY_CACHE_TTL_MS = 10_000;
 const TRADE_HISTORY_LIMIT = 10_000;
 
 const num = (value: number | string | null | undefined) => Number(value ?? 0);
@@ -406,7 +407,7 @@ export async function paperUnder35TradeHistory(input: PaperUnder35TradeHistoryIn
     .then((value) => {
       under35HistoryCache.set(key, {
         value,
-        expiresAtMs: Date.now() + CACHE_TTL_MS,
+        expiresAtMs: Date.now() + TRADE_HISTORY_CACHE_TTL_MS,
       });
       return value;
     })
