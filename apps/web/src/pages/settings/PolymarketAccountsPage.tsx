@@ -3,6 +3,7 @@ import {
   CircleAlert,
   ExternalLink,
   LockKeyhole,
+  Pencil,
   Plus,
   ShieldCheck,
   Star,
@@ -40,6 +41,9 @@ function Field({
   onChange,
   placeholder,
   secret,
+  numeric,
+  max,
+  limitLabel,
 }: {
   id: string;
   label: string;
@@ -48,19 +52,41 @@ function Field({
   onChange: (value: string) => void;
   placeholder?: string;
   secret?: boolean;
+  numeric?: boolean;
+  max?: number | null;
+  limitLabel?: string;
 }) {
+  const parsedValue = Number(value);
+  const aboveMaximum = numeric && max != null && Number.isFinite(parsedValue) && parsedValue > max;
+
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label htmlFor={id}>{label}</Label>
+        {max != null && limitLabel ? (
+          <Badge variant="outline" className="text-muted-foreground font-normal">
+            Admin max {limitLabel}
+          </Badge>
+        ) : null}
+      </div>
       <p className="text-muted-foreground text-xs leading-relaxed">{description}</p>
       <Input
         id={id}
-        type={secret ? "password" : "text"}
+        type={secret ? "password" : numeric ? "number" : "text"}
+        min={numeric ? 0 : undefined}
+        max={numeric && max != null ? max : undefined}
+        step={numeric ? "any" : undefined}
+        aria-invalid={aboveMaximum || undefined}
         autoComplete="off"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
       />
+      {aboveMaximum ? (
+        <p className="text-destructive text-xs">
+          Enter {limitLabel ?? max} or less to stay within the platform limit.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -72,35 +98,114 @@ export function PolymarketAccountsPage() {
     staleTime: 30_000,
   });
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(INITIAL_FORM);
-  const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+  const setField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   const refresh = () => utils.polymarketAccounts.list.invalidate();
+  const closeForm = () => {
+    setForm(INITIAL_FORM);
+    setAdding(false);
+    setEditingId(null);
+  };
   const create = trpc.polymarketAccounts.create.useMutation({
     onSuccess: async () => {
-      setForm(INITIAL_FORM);
-      setAdding(false);
+      closeForm();
+      await refresh();
+    },
+  });
+  const updateAccount = trpc.polymarketAccounts.update.useMutation({
+    onSuccess: async () => {
+      closeForm();
       await refresh();
     },
   });
   const setDefault = trpc.polymarketAccounts.setDefault.useMutation({ onSuccess: refresh });
   const remove = trpc.polymarketAccounts.remove.useMutation({ onSuccess: refresh });
 
-  const save = () =>
-    create.mutate({
+  const save = () => {
+    const values = {
       label: form.label,
       walletType: form.walletType,
       walletAddress: form.walletAddress,
       signerAddress: form.signerAddress,
-      signerPrivateKey: form.signerPrivateKey,
-      relayerApiKey: form.relayerApiKey,
       maxOrderUsd: Number(form.maxOrderUsd),
       maxOpenExposureUsd: Number(form.maxOpenExposureUsd),
       dailyLossLimitUsd: Number(form.dailyLossLimitUsd),
       maxBookAgeMs: Number(form.maxBookAgeMs),
       isDefault: form.isDefault,
+    };
+    if (editingId) {
+      updateAccount.mutate({
+        id: editingId,
+        ...values,
+        ...(form.signerPrivateKey.trim() ? { signerPrivateKey: form.signerPrivateKey.trim() } : {}),
+        ...(form.relayerApiKey.trim() ? { relayerApiKey: form.relayerApiKey.trim() } : {}),
+      });
+      return;
+    }
+    create.mutate({
+      ...values,
+      signerPrivateKey: form.signerPrivateKey,
+      relayerApiKey: form.relayerApiKey,
     });
+  };
+
+  const beginAdd = () => {
+    if (adding && !editingId) {
+      closeForm();
+      return;
+    }
+    setForm(INITIAL_FORM);
+    setEditingId(null);
+    setAdding(true);
+  };
+
+  const beginEdit = (account: NonNullable<typeof accounts.data>["accounts"][number]) => {
+    setForm({
+      label: account.label,
+      walletType: account.walletType,
+      walletAddress: account.walletAddress,
+      signerAddress: account.signerAddress,
+      signerPrivateKey: "",
+      relayerApiKey: "",
+      maxOrderUsd: String(account.maxOrderUsd),
+      maxOpenExposureUsd: String(account.maxOpenExposureUsd),
+      dailyLossLimitUsd: String(account.dailyLossLimitUsd),
+      maxBookAgeMs: String(account.maxBookAgeMs),
+      isDefault: account.isDefault,
+    });
+    setAdding(false);
+    setEditingId(account.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const editingAccount = accounts.data?.accounts.find((account) => account.id === editingId);
+  const formOpen = adding || Boolean(editingId);
+  const saving = create.isPending || updateAccount.isPending;
+  const saveError = editingId ? updateAccount.error : create.error;
+  const riskCeilings = systemStatus.data?.risk;
+  const riskInputs = [
+    { value: form.maxOrderUsd, maximum: riskCeilings?.maxOrderUsd },
+    { value: form.maxOpenExposureUsd, maximum: riskCeilings?.maxOpenExposureUsd },
+    { value: form.dailyLossLimitUsd, maximum: riskCeilings?.dailyLossLimitUsd },
+    { value: form.maxBookAgeMs, maximum: riskCeilings?.maxBookAgeMs },
+  ];
+  const riskInputInvalid = riskInputs.some(({ value, maximum }) => {
+    const parsed = Number(value);
+    return (
+      !Number.isFinite(parsed) ||
+      parsed <= 0 ||
+      (maximum != null && Number.isFinite(maximum) && parsed > maximum)
+    );
+  });
+  const formatUsd = (value: number | null | undefined) =>
+    value == null ? "not configured" : `$${value.toLocaleString()}`;
+  const formatMilliseconds = (value: number | null | undefined) =>
+    value == null ? "not configured" : `${value.toLocaleString()} ms`;
+  const conservativeValue = (fallback: number, maximum: number | null | undefined) =>
+    String(maximum == null ? fallback : Math.min(fallback, maximum));
 
   return (
     <div className="space-y-6">
@@ -118,9 +223,9 @@ export function PolymarketAccountsPage() {
                 your accounts—not the platform&apos;s shared Builder connection.
               </CardDescription>
             </div>
-            <Button onClick={() => setAdding((value) => !value)}>
+            <Button onClick={beginAdd}>
               <Plus className="mr-2 h-4 w-4" />
-              {adding ? "Close form" : "Add account"}
+              {adding && !editingId ? "Close form" : "Add account"}
             </Button>
           </div>
         </CardHeader>
@@ -140,14 +245,18 @@ export function PolymarketAccountsPage() {
         </CardContent>
       </Card>
 
-      {adding ? (
+      {formOpen ? (
         <Card>
           <CardHeader>
-            <CardTitle>Add an existing Polymarket account</CardTitle>
+            <CardTitle>
+              {editingId
+                ? `Edit ${editingAccount?.label ?? "Polymarket account"}`
+                : "Add an existing Polymarket account"}
+            </CardTitle>
             <CardDescription>
-              Use Polymarket Settings → API Keys → Relayer API Keys. The funder wallet holds the
-              positions; the signer address and private key identify the wallet authorized to act
-              for it.
+              {editingId
+                ? "Update the account identity or its risk limits. Stored secrets stay encrypted and unchanged unless you enter replacements."
+                : "Use Polymarket Settings → API Keys → Relayer API Keys. The funder wallet holds the positions; the signer address and private key identify the wallet authorized to act for it."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -169,7 +278,7 @@ export function PolymarketAccountsPage() {
                 label="Account label"
                 description="A private label such as Research wallet or Live wallet 2."
                 value={form.label}
-                onChange={(value) => update("label", value)}
+                onChange={(value) => setField("label", value)}
                 placeholder="Research wallet"
               />
               <div className="space-y-2">
@@ -183,7 +292,7 @@ export function PolymarketAccountsPage() {
                   id="pm-wallet-type"
                   className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
                   value={form.walletType}
-                  onChange={(event) => update("walletType", event.target.value as WalletType)}
+                  onChange={(event) => setField("walletType", event.target.value as WalletType)}
                 >
                   <option value="deposit">Deposit wallet (current default)</option>
                   <option value="proxy">Proxy wallet</option>
@@ -196,7 +305,7 @@ export function PolymarketAccountsPage() {
                 label="Funder / account wallet address"
                 description="The public 0x address that holds Polymarket funds and positions."
                 value={form.walletAddress}
-                onChange={(value) => update("walletAddress", value)}
+                onChange={(value) => setField("walletAddress", value)}
                 placeholder="0x…"
               />
               <Field
@@ -204,25 +313,35 @@ export function PolymarketAccountsPage() {
                 label="Signer address"
                 description="The public 0x address shown with the Relayer API key."
                 value={form.signerAddress}
-                onChange={(value) => update("signerAddress", value)}
+                onChange={(value) => setField("signerAddress", value)}
                 placeholder="0x…"
               />
               <Field
                 id="pm-signer-key"
                 label="Signer private key"
-                description="The dedicated signer used locally for Polymarket authentication and order signatures."
+                description={
+                  editingId
+                    ? "Leave blank to keep the encrypted signer private key already stored."
+                    : "The dedicated signer used locally for Polymarket authentication and order signatures."
+                }
                 value={form.signerPrivateKey}
-                onChange={(value) => update("signerPrivateKey", value)}
-                placeholder="0x…"
+                onChange={(value) => setField("signerPrivateKey", value)}
+                placeholder={editingId ? "Stored securely — enter only to replace" : "0x…"}
                 secret
               />
               <Field
                 id="pm-relayer-key"
                 label="Relayer API key"
-                description="Create this in your Polymarket account settings. This is not the admin Builder API key."
+                description={
+                  editingId
+                    ? "Leave blank to keep the encrypted Relayer API key already stored."
+                    : "Create this in your Polymarket account settings. This is not the admin Builder API key."
+                }
                 value={form.relayerApiKey}
-                onChange={(value) => update("relayerApiKey", value)}
-                placeholder="Relayer API key"
+                onChange={(value) => setField("relayerApiKey", value)}
+                placeholder={
+                  editingId ? "Stored securely — enter only to replace" : "Relayer API key"
+                }
                 secret
               />
             </div>
@@ -241,44 +360,71 @@ export function PolymarketAccountsPage() {
                   onClick={() =>
                     setForm((current) => ({
                       ...current,
-                      maxOrderUsd: "5",
-                      maxOpenExposureUsd: "25",
-                      dailyLossLimitUsd: "20",
-                      maxBookAgeMs: "2000",
+                      maxOrderUsd: conservativeValue(5, riskCeilings?.maxOrderUsd),
+                      maxOpenExposureUsd: conservativeValue(25, riskCeilings?.maxOpenExposureUsd),
+                      dailyLossLimitUsd: conservativeValue(20, riskCeilings?.dailyLossLimitUsd),
+                      maxBookAgeMs: conservativeValue(2000, riskCeilings?.maxBookAgeMs),
                     }))
                   }
                 >
                   Conservative defaults
                 </Button>
               </div>
+              {riskCeilings?.controlsReady ? (
+                <div className="border-primary/20 bg-primary/5 mt-4 flex items-start gap-3 rounded-lg border p-3">
+                  <ShieldCheck className="text-primary mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Platform safety limits</p>
+                    <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                      Order {formatUsd(riskCeilings.maxOrderUsd)} · exposure{" "}
+                      {formatUsd(riskCeilings.maxOpenExposureUsd)} · daily loss{" "}
+                      {formatUsd(riskCeilings.dailyLossLimitUsd)} · quote age{" "}
+                      {formatMilliseconds(riskCeilings.maxBookAgeMs)}. Your account can use stricter
+                      limits, but not higher ones.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Field
                   id="pm-max-order"
                   label="Max order ($)"
                   description="Largest single order."
                   value={form.maxOrderUsd}
-                  onChange={(value) => update("maxOrderUsd", value)}
+                  onChange={(value) => setField("maxOrderUsd", value)}
+                  numeric
+                  max={riskCeilings?.maxOrderUsd}
+                  limitLabel={formatUsd(riskCeilings?.maxOrderUsd)}
                 />
                 <Field
                   id="pm-max-exposure"
                   label="Max exposure ($)"
                   description="Total unresolved exposure."
                   value={form.maxOpenExposureUsd}
-                  onChange={(value) => update("maxOpenExposureUsd", value)}
+                  onChange={(value) => setField("maxOpenExposureUsd", value)}
+                  numeric
+                  max={riskCeilings?.maxOpenExposureUsd}
+                  limitLabel={formatUsd(riskCeilings?.maxOpenExposureUsd)}
                 />
                 <Field
                   id="pm-daily-loss"
                   label="Daily loss stop ($)"
                   description="Stops new orders for the day."
                   value={form.dailyLossLimitUsd}
-                  onChange={(value) => update("dailyLossLimitUsd", value)}
+                  onChange={(value) => setField("dailyLossLimitUsd", value)}
+                  numeric
+                  max={riskCeilings?.dailyLossLimitUsd}
+                  limitLabel={formatUsd(riskCeilings?.dailyLossLimitUsd)}
                 />
                 <Field
                   id="pm-book-age"
                   label="Max quote age (ms)"
                   description="Reject stale local books."
                   value={form.maxBookAgeMs}
-                  onChange={(value) => update("maxBookAgeMs", value)}
+                  onChange={(value) => setField("maxBookAgeMs", value)}
+                  numeric
+                  max={riskCeilings?.maxBookAgeMs}
+                  limitLabel={formatMilliseconds(riskCeilings?.maxBookAgeMs)}
                 />
               </div>
             </div>
@@ -287,9 +433,12 @@ export function PolymarketAccountsPage() {
               <input
                 type="checkbox"
                 checked={form.isDefault}
-                onChange={(event) => update("isDefault", event.target.checked)}
+                disabled={Boolean(editingAccount?.isDefault)}
+                onChange={(event) => setField("isDefault", event.target.checked)}
               />
-              Make this my default Polymarket account
+              {editingAccount?.isDefault
+                ? "This is your default Polymarket account"
+                : "Make this my default Polymarket account"}
             </label>
 
             <div className="border-destructive/30 bg-destructive/5 rounded-lg border p-4">
@@ -306,11 +455,16 @@ export function PolymarketAccountsPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <Button
-                disabled={create.isPending || !systemStatus.data?.risk.controlsReady}
+                disabled={saving || !systemStatus.data?.risk.controlsReady || riskInputInvalid}
                 onClick={save}
               >
-                {create.isPending ? "Encrypting and saving…" : "Save account"}
+                {saving ? "Encrypting and saving…" : editingId ? "Save changes" : "Save account"}
               </Button>
+              {editingId ? (
+                <Button variant="outline" disabled={saving} onClick={closeForm}>
+                  Cancel
+                </Button>
+              ) : null}
               <a
                 href="https://docs.polymarket.com/trading/wallets-auth#connect-your-account"
                 target="_blank"
@@ -320,8 +474,8 @@ export function PolymarketAccountsPage() {
                 Official account connection guide
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
-              {create.error ? (
-                <p className="text-destructive basis-full text-sm">{create.error.message}</p>
+              {saveError ? (
+                <p className="text-destructive basis-full text-sm">{saveError.message}</p>
               ) : null}
             </div>
           </CardContent>
@@ -385,6 +539,10 @@ export function PolymarketAccountsPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => beginEdit(account)}>
+                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
                   {!account.isDefault ? (
                     <Button
                       size="sm"
