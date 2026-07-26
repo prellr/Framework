@@ -88,6 +88,10 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD}@postgres:5432/app
       REDIS_URL: redis://redis:6379
+      # Some queue processors share authenticated application services. Better Auth fails closed in
+      # production when its deployment secret is absent, so the worker needs the same runtime-only
+      # secret as the API even though the worker does not expose an HTTP authentication surface.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       # The worker decrypts per-user keys in runCell — it needs the master key too.
       JESTER_MASTER_KEY: ${JESTER_MASTER_KEY}
     depends_on:

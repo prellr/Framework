@@ -56,6 +56,7 @@ test("multi-wallet storage preserves account isolation and fail-closed risk ceil
 
 test("production images cannot ingest deployment secrets or database backups", () => {
   const dockerignore = read("../../../../.dockerignore");
+  const compose = read("../../../../docker-compose.yml");
   const apiPackage = JSON.parse(read("../../package.json")) as {
     scripts: { start: string; worker: string };
   };
@@ -69,4 +70,9 @@ test("production images cannot ingest deployment secrets or database backups", (
   assert.match(apiPackage.scripts.worker, /--env-file-if-exists/);
   assert.doesNotMatch(apiPackage.scripts.start, /(?:^|\s)--env-file=/);
   assert.doesNotMatch(apiPackage.scripts.worker, /(?:^|\s)--env-file=/);
+  assert.match(
+    compose,
+    /worker:[\s\S]+?BETTER_AUTH_SECRET:\s*\$\{BETTER_AUTH_SECRET}/,
+    "the production worker must receive Better Auth's runtime-only secret",
+  );
 });
