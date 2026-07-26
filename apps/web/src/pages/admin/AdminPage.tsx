@@ -26,11 +26,16 @@ type LoginSortKey = "at" | "user" | "method" | "ip" | "agent";
 
 function loginValue(event: LoginEvent, key: LoginSortKey): SortValue {
   switch (key) {
-    case "at": return new Date(event.createdAt).getTime();
-    case "user": return `${event.userName} ${event.userEmail}`;
-    case "method": return event.authMethod;
-    case "ip": return event.ipAddress;
-    case "agent": return event.userAgent;
+    case "at":
+      return new Date(event.createdAt).getTime();
+    case "user":
+      return `${event.userName} ${event.userEmail}`;
+    case "method":
+      return event.authMethod;
+    case "ip":
+      return event.ipAddress;
+    case "agent":
+      return event.userAgent;
   }
 }
 
@@ -42,11 +47,13 @@ export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
       <PageHeader title="Admin" subtitle="Users, successful login history, and runtime settings" />
 
       <div className="flex gap-2 border-b">
-        {([
-          ["users", "Users"],
-          ["login-history", "Login history"],
-          ["settings", "Settings"],
-        ] as const).map(([key, label]) => (
+        {(
+          [
+            ["users", "Users"],
+            ["login-history", "Login history"],
+            ["settings", "Settings"],
+          ] as const
+        ).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -54,7 +61,7 @@ export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
               "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
               tab === key
                 ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
+                : "text-muted-foreground hover:text-foreground border-transparent",
             )}
           >
             {label}
@@ -67,7 +74,7 @@ export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
       ) : tab === "login-history" ? (
         <LoginHistoryTab />
       ) : (
-        <SettingsTab />
+        <RuntimeSettingsPanel />
       )}
     </div>
   );
@@ -118,7 +125,12 @@ function UsersTab() {
           >
             <div className="space-y-1.5">
               <Label htmlFor="new-name">Name</Label>
-              <Input id="new-name" value={name} onChange={(e) => setName(e.target.value)} required />
+              <Input
+                id="new-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-email">Email</Label>
@@ -147,7 +159,7 @@ function UsersTab() {
                 id="new-role"
                 value={role}
                 onChange={(e) => setRole(e.target.value as RoleOption)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm"
               >
                 {ROLES.map((r) => (
                   <option key={r} value={r}>
@@ -164,7 +176,7 @@ function UsersTab() {
             </div>
           </form>
           {createUser.error && (
-            <p className="mt-2 text-sm text-destructive">{createUser.error.message}</p>
+            <p className="text-destructive mt-2 text-sm">{createUser.error.message}</p>
           )}
         </CardContent>
       </Card>
@@ -186,7 +198,7 @@ function UsersTab() {
                     {user.name}
                     {isSelf && <Badge variant="secondary">you</Badge>}
                   </div>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                  <p className="text-muted-foreground text-sm">{user.email}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <select
@@ -195,7 +207,7 @@ function UsersTab() {
                     onChange={(e) =>
                       setUserRole.mutate({ userId: user.id, role: e.target.value as RoleOption })
                     }
-                    className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                    className="border-input h-8 rounded-md border bg-transparent px-2 text-sm"
                   >
                     {ROLES.map((r) => (
                       <option key={r} value={r}>
@@ -263,10 +275,8 @@ function LoginHistoryTab() {
     [history.data, sort],
   );
   const timezone = effectiveTz(undefined);
-  const sortRows = (
-    key: LoginSortKey,
-    initialDirection: "asc" | "desc" = "asc",
-  ) => setSort((current) => nextSortState(current, key, initialDirection));
+  const sortRows = (key: LoginSortKey, initialDirection: "asc" | "desc" = "asc") =>
+    setSort((current) => nextSortState(current, key, initialDirection));
   const total = history.data?.total ?? 0;
   const first = total === 0 ? 0 : offset + 1;
   const last = Math.min(total, offset + limit);
@@ -285,7 +295,9 @@ function LoginHistoryTab() {
           </CardDescription>
         </div>
         <div className="w-full sm:w-72">
-          <Label htmlFor="login-user-filter" className="text-xs">User</Label>
+          <Label htmlFor="login-user-filter" className="text-xs">
+            User
+          </Label>
           <select
             id="login-user-filter"
             value={userId}
@@ -293,7 +305,7 @@ function LoginHistoryTab() {
               setUserId(event.target.value);
               setOffset(0);
             }}
-            className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            className="border-input mt-1 flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm"
           >
             <option value="all">All users</option>
             {users.data?.map((user) => (
@@ -306,30 +318,65 @@ function LoginHistoryTab() {
       </CardHeader>
       <CardContent className="p-0">
         {history.isLoading ? (
-          <div className="h-56 animate-pulse bg-muted/20" />
+          <div className="bg-muted/20 h-56 animate-pulse" />
         ) : history.isError ? (
-          <div className="px-6 py-8 text-sm text-destructive">
+          <div className="text-destructive px-6 py-8 text-sm">
             Login history is unavailable: {history.error.message}
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+          <div className="text-muted-foreground px-6 py-12 text-center text-sm">
             No successful logins have been recorded for this scope yet.
           </div>
         ) : (
           <div className="overflow-x-auto border-y">
             <table className="w-full min-w-[960px] text-sm">
-              <thead className="bg-muted/20 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <thead className="bg-muted/20 text-muted-foreground text-[10px] uppercase tracking-[0.12em]">
                 <tr>
-                  <PolymarketSortableHeader column="at" active={sort.key} direction={sort.direction} onSort={sortRows}>Signed in</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="user" active={sort.key} direction={sort.direction} onSort={sortRows}>User</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="method" active={sort.key} direction={sort.direction} onSort={sortRows}>Method</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="ip" active={sort.key} direction={sort.direction} onSort={sortRows}>IP address</PolymarketSortableHeader>
-                  <PolymarketSortableHeader column="agent" active={sort.key} direction={sort.direction} onSort={sortRows}>Browser / client</PolymarketSortableHeader>
+                  <PolymarketSortableHeader
+                    column="at"
+                    active={sort.key}
+                    direction={sort.direction}
+                    onSort={sortRows}
+                  >
+                    Signed in
+                  </PolymarketSortableHeader>
+                  <PolymarketSortableHeader
+                    column="user"
+                    active={sort.key}
+                    direction={sort.direction}
+                    onSort={sortRows}
+                  >
+                    User
+                  </PolymarketSortableHeader>
+                  <PolymarketSortableHeader
+                    column="method"
+                    active={sort.key}
+                    direction={sort.direction}
+                    onSort={sortRows}
+                  >
+                    Method
+                  </PolymarketSortableHeader>
+                  <PolymarketSortableHeader
+                    column="ip"
+                    active={sort.key}
+                    direction={sort.direction}
+                    onSort={sortRows}
+                  >
+                    IP address
+                  </PolymarketSortableHeader>
+                  <PolymarketSortableHeader
+                    column="agent"
+                    active={sort.key}
+                    direction={sort.direction}
+                    onSort={sortRows}
+                  >
+                    Browser / client
+                  </PolymarketSortableHeader>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {rows.map((event) => (
-                  <tr key={event.id} className="align-top hover:bg-muted/10">
+                  <tr key={event.id} className="hover:bg-muted/10 align-top">
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="font-medium">
                         {new Date(event.createdAt).toLocaleString(undefined, {
@@ -338,20 +385,18 @@ function LoginHistoryTab() {
                           timeStyle: "medium",
                         })}
                       </div>
-                      <div className="mt-0.5 text-[10px] text-muted-foreground">{timezone}</div>
+                      <div className="text-muted-foreground mt-0.5 text-[10px]">{timezone}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{event.userName}</div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">{event.userEmail}</div>
+                      <div className="text-muted-foreground mt-0.5 text-xs">{event.userEmail}</div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant="secondary">{event.authMethod}</Badge>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {event.ipAddress ?? "—"}
-                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">{event.ipAddress ?? "—"}</td>
                     <td
-                      className="max-w-md px-4 py-3 text-xs leading-relaxed text-muted-foreground"
+                      className="text-muted-foreground max-w-md px-4 py-3 text-xs leading-relaxed"
                       title={event.userAgent ?? undefined}
                     >
                       <span className="line-clamp-2">{event.userAgent ?? "—"}</span>
@@ -362,7 +407,7 @@ function LoginHistoryTab() {
             </table>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-muted-foreground">
+        <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs">
           <span>
             Showing {first.toLocaleString()}–{last.toLocaleString()} of {total.toLocaleString()}
           </span>
@@ -409,8 +454,8 @@ function TimezoneCard() {
       <CardHeader>
         <CardTitle>Your timezone</CardTitle>
         <CardDescription>
-          Day-based views (daily win rate, per-day rollups) are bucketed in this zone. The server runs in
-          UTC, so without this a late-evening session would land on the wrong calendar day.
+          Day-based views (daily win rate, per-day rollups) are bucketed in this zone. The server
+          runs in UTC, so without this a late-evening session would land on the wrong calendar day.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -418,7 +463,7 @@ function TimezoneCard() {
           <select
             value={value}
             onChange={(e) => setTz(e.target.value)}
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+            className="border-input h-9 rounded-md border bg-transparent px-3 text-sm shadow-sm"
           >
             {TZ_OPTIONS.map((z) => (
               <option key={z} value={z}>
@@ -426,21 +471,30 @@ function TimezoneCard() {
               </option>
             ))}
           </select>
-          <Button disabled={save.isPending || value === saved} onClick={() => save.mutate({ timezone: value })}>
+          <Button
+            disabled={save.isPending || value === saved}
+            onClick={() => save.mutate({ timezone: value })}
+          >
             <Save className="mr-2 h-4 w-4" />
             {save.isPending ? "Saving…" : "Save"}
           </Button>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {saved ? `Saved: ${saved}` : `Not set — using this browser's zone (${VIEWER_TZ})`}
           </span>
         </div>
-        {save.error && <p className="text-sm text-destructive">{save.error.message}</p>}
+        {save.error && <p className="text-destructive text-sm">{save.error.message}</p>}
       </CardContent>
     </Card>
   );
 }
 
-function SettingsTab() {
+export function RuntimeSettingsPanel({
+  groupIds,
+  includeTimezone = true,
+}: {
+  groupIds?: readonly string[];
+  includeTimezone?: boolean;
+} = {}) {
   const utils = trpc.useUtils();
   const settings = trpc.admin.settings.useQuery();
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -453,12 +507,13 @@ function SettingsTab() {
   });
 
   const dirty = Object.keys(edits).length > 0;
+  const groups = settings.data?.groups.filter((group) => !groupIds || groupIds.includes(group.id));
 
   return (
     <div className="space-y-6">
-      <TimezoneCard />
+      {includeTimezone ? <TimezoneCard /> : null}
 
-      {settings.data?.groups.map((group) => (
+      {groups?.map((group) => (
         <Card key={group.id}>
           <CardHeader>
             <CardTitle>{group.name}</CardTitle>
@@ -475,7 +530,10 @@ function SettingsTab() {
                     {v.set ? "set" : "not set"}
                   </Badge>
                   {(v as any).secret && (v as any).preview && (
-                    <span className="font-mono text-xs text-muted-foreground" title="Value is hidden — enter a new one to replace it">
+                    <span
+                      className="text-muted-foreground font-mono text-xs"
+                      title="Value is hidden — enter a new one to replace it"
+                    >
                       {(v as any).preview}
                     </span>
                   )}
@@ -493,7 +551,7 @@ function SettingsTab() {
                   onChange={(e) => setEdits((prev) => ({ ...prev, [v.name]: e.target.value }))}
                 />
                 {(v as any).secret && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-muted-foreground text-[11px]">
                     Stored value is never sent to the browser. Leave blank to keep it unchanged.
                   </p>
                 )}
@@ -513,7 +571,7 @@ function SettingsTab() {
             {updateSettings.isPending ? "Saving…" : "Save changes"}
           </Button>
           {updateSettings.error && (
-            <p className="text-sm text-destructive">{updateSettings.error.message}</p>
+            <p className="text-destructive text-sm">{updateSettings.error.message}</p>
           )}
         </div>
       )}

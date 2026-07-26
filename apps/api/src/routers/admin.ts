@@ -5,7 +5,7 @@ import { db, users, appSettings, loginEvents } from "@framework/db";
 import { count, desc, eq } from "drizzle-orm";
 import type { Role } from "@framework/db";
 import { auth } from "../auth.ts";
-import { getSetting, setSetting } from "../services/config.ts";
+import { getSetting, isSecretSetting, setSetting } from "../services/config.ts";
 import { audit } from "../services/audit.ts";
 
 const roleEnum = z.enum(["admin", "manager", "operator", "viewer"]);
@@ -26,14 +26,37 @@ const SETTING_GROUPS: { id: string; name: string; description: string; keys: str
     name: "Tesseract Field logger",
     description:
       "Read-only research collection of the live Tesseract Field. enabled: master arm 'true'/'false'. pairs: broad 10m set (blank = default). focus_enabled/focus_pairs: the tighter 5m set (default BTC-USD) sampled at the strategy's resolution; broad set excludes these. interval_min: informational.",
-    keys: ["tesseract_logger_enabled", "tesseract_logger_pairs", "tesseract_focus_enabled", "tesseract_focus_pairs", "tesseract_logger_interval_min"],
+    keys: [
+      "tesseract_logger_enabled",
+      "tesseract_logger_pairs",
+      "tesseract_focus_enabled",
+      "tesseract_focus_pairs",
+      "tesseract_logger_interval_min",
+    ],
   },
   {
     id: "polymarket",
     name: "Polymarket Up/Down",
     description:
-      "Read-only descriptive research. book_capture_enabled: master arm ('true'/'false') for the 3-min job that snapshots open BTC, ETH, SOL, XRP, DOGE, and BNB Up/Down books so scoring prices entries at the real ask instead of the mid. signal_gauge_logger_enabled: master arm for the 5-min Trade-composite-gauge logger (tournament bot #2; one scan call/tick). signal_gauge_pairs: blank = default coin set. Light; no orders anywhere in this system.",
-    keys: ["polymarket_book_capture_enabled", "signal_gauge_logger_enabled", "signal_gauge_pairs", "paper_floor_enabled", "v1_signal_logger_enabled", "v1_signal_pairs"],
+      "Research collection plus the locked Polymarket connector control plane. Wallet, signer, and relayer values are prerequisites for a future authenticated client; credential-style values are encrypted at rest and never returned in plaintext. POLYMARKET_LIVE_EXECUTION_ENABLED is a reserved arm only: no submission or cancellation route exists yet.",
+    keys: [
+      "polymarket_book_capture_enabled",
+      "signal_gauge_logger_enabled",
+      "signal_gauge_pairs",
+      "paper_floor_enabled",
+      "v1_signal_logger_enabled",
+      "v1_signal_pairs",
+      "POLYMARKET_WALLET_ADDRESS",
+      "POLYMARKET_SIGNER_PRIVATE_KEY",
+      "POLYMARKET_RELAYER_API_KEY",
+      "POLYMARKET_RELAYER_API_KEY_ADDRESS",
+      "POLYGON_RPC_URL",
+      "POLYMARKET_MAX_ORDER_USD",
+      "POLYMARKET_MAX_OPEN_EXPOSURE_USD",
+      "POLYMARKET_DAILY_LOSS_LIMIT_USD",
+      "POLYMARKET_MAX_BOOK_AGE_MS",
+      "POLYMARKET_LIVE_EXECUTION_ENABLED",
+    ],
   },
 ];
 
@@ -187,8 +210,15 @@ export const adminRouter = t.router({
       } catch {
         throw new Error(`Unknown timezone "${input.timezone}"`);
       }
-      await db.update(users).set({ timezone: input.timezone, updatedAt: new Date() }).where(eq(users.id, ctx.user.id));
-      await audit(ctx, "admin.setTimezone", { resourceType: "user", resourceId: ctx.user.id, newValue: { timezone: input.timezone } });
+      await db
+        .update(users)
+        .set({ timezone: input.timezone, updatedAt: new Date() })
+        .where(eq(users.id, ctx.user.id));
+      await audit(ctx, "admin.setTimezone", {
+        resourceType: "user",
+        resourceId: ctx.user.id,
+        newValue: { timezone: input.timezone },
+      });
       return { timezone: input.timezone };
     }),
 
@@ -199,14 +229,13 @@ export const adminRouter = t.router({
    * keys an admin actually edits, so an empty (masked) field never clobbers a stored secret.
    */
   settings: adminProcedure.query(async () => {
-    const isSecret = (name: string) => /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL/i.test(name);
     const groups = await Promise.all(
       SETTING_GROUPS.map(async (group) => ({
         ...group,
         vars: await Promise.all(
           group.keys.map(async (name) => {
             const value = await getSetting(name);
-            const secret = isSecret(name);
+            const secret = isSecretSetting(name);
             return {
               name,
               set: !!value,
@@ -234,11 +263,16 @@ export const adminRouter = t.router({
           // MUST go through setSetting — it seals credential-style keys before they hit the DB.
           // Writing to appSettings directly here previously stored API keys in plaintext.
           await setSetting(key, value);
-          await db.update(appSettings).set({ updatedBy: ctx.user.id }).where(eq(appSettings.key, key));
+          await db
+            .update(appSettings)
+            .set({ updatedBy: ctx.user.id })
+            .where(eq(appSettings.key, key));
         }
       }
       // Reset service singletons that cache credentials here, e.g.:
-      // resetSomeApiClient();
+      const { resetPolymarketConnectorReadinessCache } =
+        await import("../services/polymarket-connector-readiness.ts");
+      resetPolymarketConnectorReadinessCache();
       return { success: true };
     }),
 });

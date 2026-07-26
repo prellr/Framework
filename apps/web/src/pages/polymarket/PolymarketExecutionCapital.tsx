@@ -5,9 +5,11 @@ import {
   CircleDollarSign,
   Clock3,
   Gauge,
+  KeyRound,
   Layers3,
   Lock,
   Network,
+  RadioTower,
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
@@ -459,6 +461,10 @@ export function PolymarketExecutionCapital() {
     staleTime: 60_000,
     refetchInterval: 120_000,
   });
+  const connector = trpc.polymarket.connectorReadiness.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
   const independence = trpc.polymarket.strategyIndependence.useQuery(undefined, {
     staleTime: 60_000,
     refetchInterval: 120_000,
@@ -506,6 +512,7 @@ export function PolymarketExecutionCapital() {
   const markoutData = markout.data;
   const markoutReport = markoutData?.report;
   const shadowData = shadow.data;
+  const connectorData = connector.data;
   const independenceData = independence.data;
   const capacityReady = capacityData?.readyForCapacityDistribution ?? false;
 
@@ -565,6 +572,129 @@ export function PolymarketExecutionCapital() {
           </div>
         </div>
       </section>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="gap-4 border-b">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <RadioTower className="h-4 w-4 text-cyan-400" />
+                Polymarket connector readiness
+              </CardTitle>
+              <p className="text-muted-foreground mt-2 max-w-4xl text-xs leading-5">
+                The public SDK and shared market-data path are the connected half. Account
+                authentication, private order updates, balance reconciliation, submission, and
+                cancellation remain separate locked stages.
+              </p>
+            </div>
+            <div className="bg-background/70 text-muted-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
+              <Lock className="h-3.5 w-3.5" />
+              {connectorData?.phase === "configured-locked"
+                ? "Credentials configured · execution locked"
+                : connectorData?.phase === "public-connected"
+                  ? "Public connected · account not configured"
+                  : "Public probe unavailable · execution locked"}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-5">
+          {connectorData ? (
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricTile
+                  label="Official public SDK"
+                  value={connectorData.publicApi.reachable ? "Connected" : "Unavailable"}
+                  note={`${connectorData.sdkPackage} ${connectorData.sdkVersion} · ${
+                    connectorData.publicApi.latencyMs == null
+                      ? "no latency sample"
+                      : `${duration(connectorData.publicApi.latencyMs)} probe`
+                  }`}
+                  tone={connectorData.publicApi.reachable ? "good" : "warning"}
+                />
+                <MetricTile
+                  label="Market-data hot path"
+                  value={connectorData.lifecycle.feeAwareShadowPlans ? "Installed" : "Missing"}
+                  note="shared CLOB stream · fee-aware FOK shadow plans"
+                  tone={connectorData.lifecycle.feeAwareShadowPlans ? "good" : "warning"}
+                />
+                <MetricTile
+                  label="Account prerequisites"
+                  value={connectorData.account.configurationReady ? "Ready" : "Incomplete"}
+                  note={
+                    connectorData.account.walletMasked
+                      ? `wallet ${connectorData.account.walletMasked}`
+                      : "wallet, signer, and relayer are required"
+                  }
+                  tone={connectorData.account.configurationReady ? "good" : "warning"}
+                />
+                <MetricTile
+                  label="Order lifecycle"
+                  value="Locked"
+                  note="no authenticated stream, submission, or cancellation route"
+                  tone="warning"
+                />
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+                <div className="rounded-xl border p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <KeyRound className="h-4 w-4 text-violet-400" />
+                    Account and risk controls
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-xs sm:grid-cols-4">
+                    {[
+                      ["Wallet", connectorData.account.walletValid],
+                      ["Signer", connectorData.account.signerConfigured],
+                      ["Relayer key", connectorData.account.relayerApiKeyConfigured],
+                      ["Relayer address", connectorData.account.relayerApiKeyAddressValid],
+                      ["Max order", connectorData.risk.maxOrderUsd != null],
+                      ["Exposure cap", connectorData.risk.maxOpenExposureUsd != null],
+                      ["Daily loss cap", connectorData.risk.dailyLossLimitUsd != null],
+                      ["Book-age cap", connectorData.risk.maxBookAgeMs != null],
+                    ].map(([label, ready]) => (
+                      <div key={String(label)}>
+                        <div className="text-muted-foreground">{label}</div>
+                        <div
+                          className={`mt-1 font-medium ${ready ? "text-success" : "text-warning"}`}
+                        >
+                          {ready ? "Configured" : "Missing"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border p-4">
+                  <div className="flex items-center justify-between gap-3 text-sm font-medium">
+                    <span>Blocking work before a live canary</span>
+                    <span className="text-muted-foreground text-xs font-normal">
+                      arm {connectorData.execution.armRequested ? "requested" : "off"}
+                    </span>
+                  </div>
+                  <ul className="text-muted-foreground mt-3 grid gap-2 text-xs leading-5">
+                    {connectorData.blockers.slice(0, 5).map((blocker) => (
+                      <li key={blocker} className="flex gap-2">
+                        <span className="text-warning">•</span>
+                        <span>{blocker}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {connectorData.blockers.length > 5 ? (
+                    <p className="text-muted-foreground mt-2 text-[11px]">
+                      +{connectorData.blockers.length - 5} additional hard stop
+                      {connectorData.blockers.length - 5 === 1 ? "" : "s"}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
+              Connector control-plane status is unavailable. Execution remains locked.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <MetricTile

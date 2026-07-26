@@ -34,6 +34,7 @@ import { idNr4QualityDistributionAudit } from "../services/id-nr4-quality-distri
 import { z } from "zod";
 import { paperPerformance } from "../services/paper-performance.ts";
 import { paperExecutionCapital } from "../services/paper-execution-capital.ts";
+import { polymarketConnectorReadiness } from "../services/polymarket-connector-readiness.ts";
 
 /**
  * Polymarket Up/Down (Phase 1, read-only research). The scoreboard aggregates our forward-collected
@@ -165,6 +166,9 @@ export const polymarketRouter = t.router({
   // Prospective public-book preparation health only. The connector remains paper-only and has no
   // authentication, signing, submission, cancellation, credential, or balance capability.
   shadowConnectorAudit: protectedProcedure.query(() => polymarketShadowConnectorAudit()),
+  // Secret-free control-plane status. It probes the official public SDK and reports only whether
+  // account/risk prerequisites are present; it never authenticates, signs, submits, or cancels.
+  connectorReadiness: protectedProcedure.query(() => polymarketConnectorReadiness()),
   // Authoritative executed-flow coverage and Polygon reconciliation only; no direction or outcomes.
   authoritativeTradeFlowTape: protectedProcedure.query(() => authoritativeTradeFlowTapeStatus()),
   // Outcome-blind v1/v2 decision stages and all six asset buckets; no result or P&L joins.
