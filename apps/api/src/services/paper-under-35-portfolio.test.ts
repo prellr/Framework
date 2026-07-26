@@ -67,8 +67,8 @@ test("under-35 selection projection remains read-only and cannot alter strategy 
 test("dedicated page exposes a seven-day sortable inclusion workbench", () => {
   assert.match(page, /Average RAW net per selected cohort/);
   assert.match(page, /data\.dayKeys\.map/);
-  assert.match(page, /Select visible/);
-  assert.match(page, /Clear visible/);
+  assert.match(page, /Activate visible/);
+  assert.match(page, /Deactivate visible/);
   assert.match(page, /SELECTION_STORAGE_KEY/);
   assert.match(page, /WORKSPACE_STORAGE_KEY/);
   assert.match(page, /localStorage\.setItem\(\s*WORKSPACE_STORAGE_KEY/);
@@ -78,6 +78,9 @@ test("dedicated page exposes a seven-day sortable inclusion workbench", () => {
   assert.match(page, /value:\s*50,\s*label:\s*"\$50"/);
   assert.match(page, /Trade quantity/);
   assert.match(page, /Seven-day cells/);
+  assert.match(page, /Asset results across selected strategies/);
+  assert.match(page, /Deactivated strategies/);
+  assert.match(page, /aria-expanded/);
 });
 
 test("dedicated page groups selected trade history without deduplicating accounting", () => {

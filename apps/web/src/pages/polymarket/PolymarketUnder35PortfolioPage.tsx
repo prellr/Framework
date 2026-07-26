@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
+  BarChart3,
   Check,
   ChevronDown,
   ChevronRight,
@@ -46,7 +47,9 @@ type StoredWorkspace = {
   horizon: HorizonKey;
   stakeUsd: StakeUsd;
   rosterMetric: RosterMetric;
+  assetMetric: RosterMetric;
   groupMode: TradeGroupMode;
+  deactivatedExpanded: boolean;
   search: string;
   sort: SortState<SortKey>;
 };
@@ -56,7 +59,9 @@ const DEFAULT_WORKSPACE: StoredWorkspace = {
   horizon: "all",
   stakeUsd: 5,
   rosterMetric: "raw",
+  assetMetric: "raw",
   groupMode: "window",
+  deactivatedExpanded: false,
   search: "",
   sort: { key: "rawNet", direction: "desc" },
 };
@@ -116,6 +121,9 @@ function readStoredWorkspace(): StoredWorkspace {
     const rosterMetric = ["raw", "trades", "winRate"].includes(String(parsed.rosterMetric))
       ? (parsed.rosterMetric as RosterMetric)
       : DEFAULT_WORKSPACE.rosterMetric;
+    const assetMetric = ["raw", "trades", "winRate"].includes(String(parsed.assetMetric))
+      ? (parsed.assetMetric as RosterMetric)
+      : DEFAULT_WORKSPACE.assetMetric;
     const groupMode = ["window", "hour", "day"].includes(String(parsed.groupMode))
       ? (parsed.groupMode as TradeGroupMode)
       : DEFAULT_WORKSPACE.groupMode;
@@ -127,7 +135,12 @@ function readStoredWorkspace(): StoredWorkspace {
       horizon,
       stakeUsd,
       rosterMetric,
+      assetMetric,
       groupMode,
+      deactivatedExpanded:
+        typeof parsed.deactivatedExpanded === "boolean"
+          ? parsed.deactivatedExpanded
+          : DEFAULT_WORKSPACE.deactivatedExpanded,
       search: typeof parsed.search === "string" ? parsed.search : "",
       sort: { key: sortKey as SortKey, direction: sortDirection },
     };
@@ -345,6 +358,172 @@ function AverageRawChart({
         })}
       </svg>
     </div>
+  );
+}
+
+function SelectedAssetChart({
+  trades,
+  loading,
+  failed,
+  metric,
+  onMetricChange,
+  stakeUsd,
+  scope,
+}: {
+  trades: Under35Trade[];
+  loading: boolean;
+  failed: boolean;
+  metric: RosterMetric;
+  onMetricChange: (metric: RosterMetric) => void;
+  stakeUsd: StakeUsd;
+  scope: ScopeKey;
+}) {
+  const assets = useMemo(() => {
+    const grouped = new Map<string, { asset: string; n: number; wins: number; rawNet: number }>();
+    for (const trade of trades) {
+      const asset = trade.pair.replace("-USD", "").split("-")[0]?.toUpperCase() ?? trade.pair;
+      const current = grouped.get(asset) ?? { asset, n: 0, wins: 0, rawNet: 0 };
+      current.n += 1;
+      current.wins += trade.status === "won" ? 1 : 0;
+      current.rawNet += scaledTradeRaw(trade, stakeUsd);
+      grouped.set(asset, current);
+    }
+    return [...grouped.values()]
+      .map((row) => ({
+        ...row,
+        winRate: row.n ? row.wins / row.n : null,
+        value: metric === "raw" ? row.rawNet : metric === "trades" ? row.n : row.wins / row.n,
+      }))
+      .sort((left, right) => right.value - left.value || left.asset.localeCompare(right.asset));
+  }, [metric, stakeUsd, trades]);
+  const maxMagnitude = Math.max(
+    1,
+    ...assets.map((row) => (metric === "raw" ? Math.abs(row.value) : row.value)),
+  );
+  const metricLabel =
+    metric === "raw" ? "RAW net" : metric === "trades" ? "Trade quantity" : "Win rate";
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="gap-4 border-b">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BarChart3 className="h-4 w-4 text-cyan-400" />
+              Asset results across selected strategies
+            </CardTitle>
+            <p className="text-muted-foreground mt-1 max-w-4xl text-xs leading-5">
+              The active Sub35 basket only. Activating or deactivating a strategy immediately
+              changes this asset view, so rejected strategies cannot dilute the candidate portfolio
+              signal.
+            </p>
+          </div>
+          <Toggle
+            label="Chart measure"
+            value={metric}
+            onChange={onMetricChange}
+            options={[
+              { value: "raw", label: "RAW net" },
+              { value: "trades", label: "Trade quantity" },
+              { value: "winRate", label: "Win rate" },
+            ]}
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="text-muted-foreground p-10 text-center text-sm">
+            Loading selected-strategy asset evidence…
+          </div>
+        ) : failed ? (
+          <div className="border-destructive/30 bg-destructive/5 m-5 rounded-lg border p-6 text-sm">
+            Selected-strategy asset evidence is unavailable. No synthetic rows were substituted.
+          </div>
+        ) : !assets.length ? (
+          <div className="text-muted-foreground p-10 text-center text-sm">
+            Activate at least one strategy with a graded under-35¢ decision to compare assets.
+          </div>
+        ) : (
+          <div className="divide-y">
+            <div className="text-muted-foreground grid grid-cols-[72px_minmax(220px,1fr)_110px_90px_90px] gap-4 px-5 py-2.5 text-[9px] font-medium uppercase tracking-wider">
+              <span>Asset</span>
+              <span>{metricLabel}</span>
+              <span className="text-right">RAW net</span>
+              <span className="text-right">Trades</span>
+              <span className="text-right">Win rate</span>
+            </div>
+            {assets.map((row) => {
+              const barWidth = `${Math.max(2, Math.abs(row.value / maxMagnitude) * 50)}%`;
+              const positive = row.value >= 0;
+              return (
+                <div
+                  key={row.asset}
+                  className="grid grid-cols-[72px_minmax(220px,1fr)_110px_90px_90px] items-center gap-4 px-5 py-3 text-xs"
+                >
+                  <Link
+                    to="/polymarket/asset/$asset"
+                    params={{ asset: row.asset }}
+                    search={{
+                      scope,
+                      period: "7d",
+                      horizon: undefined,
+                    }}
+                    className="font-semibold hover:underline"
+                  >
+                    {row.asset}
+                  </Link>
+                  <div className="bg-muted/10 relative h-7 overflow-hidden rounded-md border">
+                    {metric === "raw" ? (
+                      <>
+                        <div className="bg-border absolute inset-y-0 left-1/2 w-px" />
+                        <div
+                          className={`absolute inset-y-1 rounded-sm ${
+                            positive ? "bg-success/55" : "bg-destructive/55"
+                          }`}
+                          style={
+                            positive
+                              ? { left: "50%", width: barWidth }
+                              : { right: "50%", width: barWidth }
+                          }
+                        />
+                      </>
+                    ) : (
+                      <div
+                        className="absolute inset-y-1 left-0 rounded-sm bg-cyan-400/55"
+                        style={{
+                          width: `${Math.max(2, Math.abs(row.value / maxMagnitude) * 100)}%`,
+                        }}
+                      />
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center font-medium tabular-nums">
+                      {metric === "raw"
+                        ? signedMoney(row.rawNet)
+                        : metric === "trades"
+                          ? row.n.toLocaleString()
+                          : pct(row.winRate)}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-right font-medium tabular-nums ${
+                      row.rawNet >= 0 ? "text-success" : "text-destructive"
+                    }`}
+                  >
+                    {signedMoney(row.rawNet)}
+                  </span>
+                  <span className="text-right tabular-nums">{row.n.toLocaleString()}</span>
+                  <span className="text-right tabular-nums">{pct(row.winRate)}</span>
+                </div>
+              );
+            })}
+            <div className="text-muted-foreground px-5 py-4 text-xs leading-5">
+              Every value comes from the selected strategy decision ledger at the ${stakeUsd}
+              {stakeUsd === 5 ? " captured" : " linear-model"} stake. Shared market-side decisions
+              remain separate rows, so RAW and trade totals are not capital-deduplicated.
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -711,7 +890,11 @@ export function PolymarketUnder35PortfolioPage() {
   const [horizon, setHorizon] = useState<HorizonKey>(initialWorkspace.horizon);
   const [stakeUsd, setStakeUsd] = useState<StakeUsd>(initialWorkspace.stakeUsd);
   const [rosterMetric, setRosterMetric] = useState<RosterMetric>(initialWorkspace.rosterMetric);
+  const [assetMetric, setAssetMetric] = useState<RosterMetric>(initialWorkspace.assetMetric);
   const [groupMode, setGroupMode] = useState<TradeGroupMode>(initialWorkspace.groupMode);
+  const [deactivatedExpanded, setDeactivatedExpanded] = useState(
+    initialWorkspace.deactivatedExpanded,
+  );
   const [search, setSearch] = useState(initialWorkspace.search);
   const [storedSelection, setStoredSelection] = useState<Set<string> | null>(readStoredSelection);
   const [sort, setSort] = useState<SortState<SortKey>>(initialWorkspace.sort);
@@ -719,9 +902,29 @@ export function PolymarketUnder35PortfolioPage() {
   useEffect(() => {
     localStorage.setItem(
       WORKSPACE_STORAGE_KEY,
-      JSON.stringify({ scope, horizon, stakeUsd, rosterMetric, groupMode, search, sort }),
+      JSON.stringify({
+        scope,
+        horizon,
+        stakeUsd,
+        rosterMetric,
+        assetMetric,
+        groupMode,
+        deactivatedExpanded,
+        search,
+        sort,
+      }),
     );
-  }, [groupMode, horizon, rosterMetric, scope, search, sort, stakeUsd]);
+  }, [
+    assetMetric,
+    deactivatedExpanded,
+    groupMode,
+    horizon,
+    rosterMetric,
+    scope,
+    search,
+    sort,
+    stakeUsd,
+  ]);
 
   const query = trpc.polymarket.under35Portfolio.useQuery(
     { scope, horizon: "all", timezone: "America/Chicago" },
@@ -838,12 +1041,71 @@ export function PolymarketUnder35PortfolioPage() {
   const selectedRaw =
     selectedCohorts.reduce((sum, cohort) => sum + cohort.rawNet, 0) * stakeMultiplier;
   const averageSelectedRaw = selectedCohorts.length ? selectedRaw / selectedCohorts.length : null;
+  const activeSortedCohorts = sortedCohorts.filter((cohort) => selectedKeys.has(cohort.key));
+  const deactivatedSortedCohorts = sortedCohorts.filter((cohort) => !selectedKeys.has(cohort.key));
+  const rosterSections = [
+    {
+      key: "active",
+      title: "Active strategies",
+      description: "Included in the candidate under-35¢ basket",
+      rows: activeSortedCohorts,
+      active: true,
+    },
+    {
+      key: "deactivated",
+      title: "Deactivated strategies",
+      description: "Still visible for comparison; excluded from basket totals and charting",
+      rows: deactivatedSortedCohorts,
+      active: false,
+    },
+  ] as const;
+  const rosterAggregate = (cohorts: Cohort[]) => {
+    const n = cohorts.reduce((sum, cohort) => sum + cohort.n, 0);
+    const wins = cohorts.reduce((sum, cohort) => sum + cohort.wins, 0);
+    const rawNet = cohorts.reduce((sum, cohort) => sum + cohort.rawNet, 0) * stakeMultiplier;
+    const days = (data?.dayKeys ?? []).map((day) => {
+      const cells = cohorts
+        .map((cohort) => dayValue(cohort, day))
+        .filter((cell): cell is NonNullable<typeof cell> => Boolean(cell));
+      const dayN = cells.reduce((sum, cell) => sum + cell.n, 0);
+      const dayWins = cells.reduce((sum, cell) => sum + cell.wins, 0);
+      return {
+        day,
+        n: dayN,
+        wins: dayWins,
+        winRate: dayN ? dayWins / dayN : null,
+        rawNet: cells.reduce((sum, cell) => sum + cell.rawNet, 0) * stakeMultiplier,
+        observed: dayN > 0,
+      };
+    });
+    return {
+      n,
+      wins,
+      winRate: n ? wins / n : null,
+      rawNet,
+      days,
+      average:
+        rosterMetric === "raw"
+          ? rawNet / (data?.dayKeys.length ?? 7)
+          : rosterMetric === "trades"
+            ? n / (data?.dayKeys.length ?? 7)
+            : n
+              ? wins / n
+              : null,
+      total: rosterMetric === "raw" ? rawNet : rosterMetric === "trades" ? n : n ? wins / n : null,
+    };
+  };
+  const aggregateDayValue = (aggregate: ReturnType<typeof rosterAggregate>, day: string) => {
+    const cell = aggregate.days.find((candidate) => candidate.day === day);
+    if (!cell?.observed) return null;
+    return rosterMetric === "raw" ? cell.rawNet : rosterMetric === "trades" ? cell.n : cell.winRate;
+  };
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Under 35¢ Portfolio"
-        subtitle="Build and compare a candidate basket from every registered Polymarket strategy × timeframe using only graded entries with a recorded fee-adjusted ask below 35¢."
+        title="Sub35"
+        subtitle="Build and inspect a candidate low-ask basket from selected strategy × timeframe cohorts using only graded entries with a recorded fee-adjusted ask below 35¢."
         actions={
           <div className="text-muted-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
             <Lock className="h-3.5 w-3.5" />
@@ -980,6 +1242,16 @@ export function PolymarketUnder35PortfolioPage() {
             </CardContent>
           </Card>
 
+          <SelectedAssetChart
+            trades={selectedTrades}
+            loading={historyQuery.isLoading}
+            failed={historyQuery.isError}
+            metric={assetMetric}
+            onMetricChange={setAssetMetric}
+            stakeUsd={stakeUsd}
+            scope={scope}
+          />
+
           <Card className="overflow-hidden">
             <CardHeader className="gap-4 border-b">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -995,10 +1267,10 @@ export function PolymarketUnder35PortfolioPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={selectVisible}>
-                    Select visible
+                    Activate visible
                   </Button>
                   <Button type="button" variant="outline" size="sm" onClick={clearVisible}>
-                    Clear visible
+                    Deactivate visible
                   </Button>
                 </div>
               </div>
@@ -1131,116 +1403,266 @@ export function PolymarketUnder35PortfolioPage() {
                       </PolymarketSortableHeader>
                     </tr>
                   </thead>
-                  <tbody>
-                    {sortedCohorts.map((cohort) => {
-                      const included = selectedKeys.has(cohort.key);
-                      return (
+                  {rosterSections.map((section) => {
+                    const aggregate = rosterAggregate(section.rows);
+                    const expanded = section.active || deactivatedExpanded;
+                    return (
+                      <tbody key={section.key}>
                         <tr
-                          key={cohort.key}
-                          className={`border-b last:border-b-0 ${
-                            included ? "bg-cyan-400/[0.025]" : "opacity-55"
-                          }`}
+                          className={
+                            section.active
+                              ? "border-y border-cyan-400/20 bg-cyan-400/[0.055]"
+                              : "bg-muted/20 border-y"
+                          }
                         >
-                          <td className="px-3 py-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => toggleCohort(cohort.key)}
-                              role="checkbox"
-                              aria-checked={included}
-                              aria-label={`${included ? "Exclude" : "Include"} ${cohort.name} ${cohort.horizonMin} minute`}
-                              className={`mx-auto flex h-5 w-5 items-center justify-center rounded border transition-colors ${
-                                included
-                                  ? "border-cyan-400 bg-cyan-400 text-slate-950"
-                                  : "border-input bg-background hover:border-cyan-400/70"
+                          <th colSpan={data.dayKeys.length + 7} className="px-4 py-3 text-left">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              {section.active ? (
+                                <div className="flex items-center gap-3">
+                                  <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                                  <div>
+                                    <div className="text-sm font-semibold">{section.title}</div>
+                                    <div className="text-muted-foreground mt-0.5 text-[11px] font-normal">
+                                      {section.description}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  aria-expanded={expanded}
+                                  onClick={() => setDeactivatedExpanded((current) => !current)}
+                                  className="hover:text-foreground flex items-center gap-3 text-left transition-colors"
+                                >
+                                  {expanded ? (
+                                    <ChevronDown className="h-4 w-4 text-cyan-400" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-cyan-400" />
+                                  )}
+                                  <span className="bg-muted-foreground/60 h-2 w-2 rounded-full" />
+                                  <div>
+                                    <div className="text-sm font-semibold">{section.title}</div>
+                                    <div className="text-muted-foreground mt-0.5 text-[11px] font-normal">
+                                      {section.description}
+                                    </div>
+                                  </div>
+                                </button>
+                              )}
+                              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] font-normal">
+                                <span className="text-muted-foreground">
+                                  {section.rows.length} cohorts
+                                </span>
+                                <span>
+                                  <span className="text-muted-foreground mr-1.5">RAW net</span>
+                                  <strong
+                                    className={
+                                      aggregate.rawNet >= 0 ? "text-success" : "text-destructive"
+                                    }
+                                  >
+                                    {signedMoney(aggregate.rawNet)}
+                                  </strong>
+                                </span>
+                                <span>
+                                  <span className="text-muted-foreground mr-1.5">Trades</span>
+                                  <strong>{aggregate.n.toLocaleString()}</strong>
+                                </span>
+                                <span>
+                                  <span className="text-muted-foreground mr-1.5">Win rate</span>
+                                  <strong>{pct(aggregate.winRate)}</strong>
+                                </span>
+                              </div>
+                            </div>
+                          </th>
+                        </tr>
+                        {expanded && section.rows.length ? (
+                          section.rows.map((cohort) => {
+                            const included = selectedKeys.has(cohort.key);
+                            return (
+                              <tr
+                                key={cohort.key}
+                                className={`border-b ${
+                                  included ? "bg-cyan-400/[0.025]" : "bg-muted/[0.015]"
+                                }`}
+                              >
+                                <td className="px-3 py-2.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCohort(cohort.key)}
+                                    role="checkbox"
+                                    aria-checked={included}
+                                    aria-label={`${included ? "Deactivate" : "Activate"} ${cohort.name} ${cohort.horizonMin} minute`}
+                                    className={`mx-auto flex h-5 w-5 items-center justify-center rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 ${
+                                      included
+                                        ? "border-cyan-400 bg-cyan-400 text-slate-950"
+                                        : "border-input bg-background hover:border-cyan-400/70"
+                                    }`}
+                                  >
+                                    {included ? <Check className="h-3.5 w-3.5" /> : null}
+                                  </button>
+                                </td>
+                                <th className="bg-card sticky left-0 z-10 px-3 py-2.5 text-left font-medium">
+                                  <Link
+                                    to="/polymarket/strategy/$botKey"
+                                    params={{ botKey: cohort.botKey }}
+                                    search={{ horizon: cohort.horizonMin, scope }}
+                                    className="hover:underline"
+                                  >
+                                    <span
+                                      className="mr-2 inline-block h-2 w-2 rounded-full"
+                                      style={{ backgroundColor: cohort.color }}
+                                    />
+                                    {cohort.name}
+                                  </Link>
+                                  {cohort.control ? (
+                                    <span className="text-muted-foreground ml-2 text-[10px] font-normal uppercase tracking-wider">
+                                      control
+                                    </span>
+                                  ) : null}
+                                </th>
+                                <td className="px-3 py-2.5 text-center font-medium">
+                                  {cohort.horizonMin}m
+                                </td>
+                                <td className="px-3 py-2.5 text-right">
+                                  {cohort.n.toLocaleString()}
+                                </td>
+                                <td className="px-3 py-2.5 text-right">{pct(cohort.winRate)}</td>
+                                {data.dayKeys.map((day) => {
+                                  const cell = cohort.days.find(
+                                    (candidate) => candidate.day === day,
+                                  );
+                                  const value = dailyRosterValue(cohort, day);
+                                  return (
+                                    <td
+                                      key={day}
+                                      className={`px-3 py-2.5 text-right ${
+                                        !cell?.observed
+                                          ? "text-muted-foreground"
+                                          : rosterMetric === "raw"
+                                            ? (value ?? 0) >= 0
+                                              ? "bg-success/[0.06] text-success"
+                                              : "bg-destructive/[0.06] text-destructive"
+                                            : rosterMetric === "winRate"
+                                              ? "bg-cyan-400/[0.04] text-cyan-400"
+                                              : ""
+                                      }`}
+                                      title={
+                                        cell?.observed
+                                          ? `${cell.n} decisions · ${pct(cell.winRate)} WR · ${signedMoney(cell.rawNet * stakeMultiplier)} modeled RAW at $${stakeUsd}`
+                                          : "No graded decision below 35¢"
+                                      }
+                                    >
+                                      {cell?.observed ? rosterValueLabel(value) : "—"}
+                                    </td>
+                                  );
+                                })}
+                                <td
+                                  className={`px-3 py-2.5 text-right ${
+                                    rosterMetric === "raw"
+                                      ? (averageRosterValue(cohort) ?? 0) >= 0
+                                        ? "text-success"
+                                        : "text-destructive"
+                                      : rosterMetric === "winRate"
+                                        ? "text-cyan-400"
+                                        : ""
+                                  }`}
+                                >
+                                  {rosterValueLabel(
+                                    averageRosterValue(cohort),
+                                    rosterMetric === "trades" ? 1 : 0,
+                                  )}
+                                </td>
+                                <td
+                                  className={`px-3 py-2.5 text-right font-semibold ${
+                                    rosterMetric === "raw"
+                                      ? (totalRosterValue(cohort) ?? 0) >= 0
+                                        ? "text-success"
+                                        : "text-destructive"
+                                      : rosterMetric === "winRate"
+                                        ? "text-cyan-400"
+                                        : ""
+                                  }`}
+                                >
+                                  {rosterValueLabel(totalRosterValue(cohort))}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : expanded ? (
+                          <tr className="border-b">
+                            <td
+                              colSpan={data.dayKeys.length + 7}
+                              className="text-muted-foreground px-5 py-7 text-center"
+                            >
+                              {section.active
+                                ? "No active strategy matches this search."
+                                : "No deactivated strategy matches this search."}
+                            </td>
+                          </tr>
+                        ) : null}
+                        {expanded ? (
+                          <tr className="bg-muted/[0.12] border-b-2 font-semibold">
+                            <td className="px-3 py-3" />
+                            <th className="bg-card sticky left-0 z-10 px-3 py-3 text-left">
+                              {section.active ? "Active totals" : "Deactivated totals"}
+                            </th>
+                            <td className="px-3 py-3 text-center">—</td>
+                            <td className="px-3 py-3 text-right">{aggregate.n.toLocaleString()}</td>
+                            <td className="px-3 py-3 text-right">{pct(aggregate.winRate)}</td>
+                            {data.dayKeys.map((day) => {
+                              const value = aggregateDayValue(aggregate, day);
+                              return (
+                                <td
+                                  key={day}
+                                  className={`px-3 py-3 text-right ${
+                                    value == null
+                                      ? "text-muted-foreground"
+                                      : rosterMetric === "raw"
+                                        ? value >= 0
+                                          ? "text-success"
+                                          : "text-destructive"
+                                        : rosterMetric === "winRate"
+                                          ? "text-cyan-400"
+                                          : ""
+                                  }`}
+                                >
+                                  {rosterValueLabel(value)}
+                                </td>
+                              );
+                            })}
+                            <td
+                              className={`px-3 py-3 text-right ${
+                                rosterMetric === "raw"
+                                  ? (aggregate.average ?? 0) >= 0
+                                    ? "text-success"
+                                    : "text-destructive"
+                                  : rosterMetric === "winRate"
+                                    ? "text-cyan-400"
+                                    : ""
                               }`}
                             >
-                              {included ? <Check className="h-3.5 w-3.5" /> : null}
-                            </button>
-                          </td>
-                          <th className="bg-card sticky left-0 z-10 px-3 py-2.5 text-left font-medium">
-                            <Link
-                              to="/polymarket/strategy/$botKey"
-                              params={{ botKey: cohort.botKey }}
-                              search={{ horizon: cohort.horizonMin, scope }}
-                              className="hover:underline"
+                              {rosterValueLabel(
+                                aggregate.average,
+                                rosterMetric === "trades" ? 1 : 0,
+                              )}
+                            </td>
+                            <td
+                              className={`px-3 py-3 text-right ${
+                                rosterMetric === "raw"
+                                  ? (aggregate.total ?? 0) >= 0
+                                    ? "text-success"
+                                    : "text-destructive"
+                                  : rosterMetric === "winRate"
+                                    ? "text-cyan-400"
+                                    : ""
+                              }`}
                             >
-                              <span
-                                className="mr-2 inline-block h-2 w-2 rounded-full"
-                                style={{ backgroundColor: cohort.color }}
-                              />
-                              {cohort.name}
-                            </Link>
-                            {cohort.control ? (
-                              <span className="text-muted-foreground ml-2 text-[10px] font-normal uppercase tracking-wider">
-                                control
-                              </span>
-                            ) : null}
-                          </th>
-                          <td className="px-3 py-2.5 text-center font-medium">
-                            {cohort.horizonMin}m
-                          </td>
-                          <td className="px-3 py-2.5 text-right">{cohort.n.toLocaleString()}</td>
-                          <td className="px-3 py-2.5 text-right">{pct(cohort.winRate)}</td>
-                          {data.dayKeys.map((day) => {
-                            const cell = cohort.days.find((candidate) => candidate.day === day);
-                            const value = dailyRosterValue(cohort, day);
-                            return (
-                              <td
-                                key={day}
-                                className={`px-3 py-2.5 text-right ${
-                                  !cell?.observed
-                                    ? "text-muted-foreground"
-                                    : rosterMetric === "raw"
-                                      ? (value ?? 0) >= 0
-                                        ? "bg-success/[0.06] text-success"
-                                        : "bg-destructive/[0.06] text-destructive"
-                                      : rosterMetric === "winRate"
-                                        ? "bg-cyan-400/[0.04] text-cyan-400"
-                                        : ""
-                                }`}
-                                title={
-                                  cell?.observed
-                                    ? `${cell.n} decisions · ${pct(cell.winRate)} WR · ${signedMoney(cell.rawNet * stakeMultiplier)} modeled RAW at $${stakeUsd}`
-                                    : "No graded decision below 35¢"
-                                }
-                              >
-                                {cell?.observed ? rosterValueLabel(value) : "—"}
-                              </td>
-                            );
-                          })}
-                          <td
-                            className={`px-3 py-2.5 text-right ${
-                              rosterMetric === "raw"
-                                ? (averageRosterValue(cohort) ?? 0) >= 0
-                                  ? "text-success"
-                                  : "text-destructive"
-                                : rosterMetric === "winRate"
-                                  ? "text-cyan-400"
-                                  : ""
-                            }`}
-                          >
-                            {rosterValueLabel(
-                              averageRosterValue(cohort),
-                              rosterMetric === "trades" ? 1 : 0,
-                            )}
-                          </td>
-                          <td
-                            className={`px-3 py-2.5 text-right font-semibold ${
-                              rosterMetric === "raw"
-                                ? (totalRosterValue(cohort) ?? 0) >= 0
-                                  ? "text-success"
-                                  : "text-destructive"
-                                : rosterMetric === "winRate"
-                                  ? "text-cyan-400"
-                                  : ""
-                            }`}
-                          >
-                            {rosterValueLabel(totalRosterValue(cohort))}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
+                              {rosterValueLabel(aggregate.total)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    );
+                  })}
                 </table>
               </div>
               {!sortedCohorts.length ? (

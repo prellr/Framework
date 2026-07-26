@@ -188,9 +188,18 @@ const polymarketRoute = createRoute({
   component: PolymarketPage,
 });
 
+const sub35Route = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/sub35",
+  component: PolymarketUnder35PortfolioPage,
+});
+
 const polymarketUnder35Route = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/under-35",
+  beforeLoad: () => {
+    throw redirect({ to: "/sub35" });
+  },
   component: PolymarketUnder35PortfolioPage,
 });
 
@@ -395,6 +404,7 @@ const routeTree = rootRoute.addChildren([
     tesseractRoute,
     knowledgeRoute,
     polymarketRoute,
+    sub35Route,
     polymarketUnder35Route,
     polymarketStrategyRoute,
     polymarketAssetRoute,

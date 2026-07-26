@@ -9,12 +9,38 @@ import { pfLabel } from "@/lib/metrics";
 const PAGES: { label: string; to: string; keywords: string }[] = [
   { label: "Overview", to: "/dashboard", keywords: "home dashboard pulse" },
   { label: "Strategies", to: "/catalog", keywords: "catalog strategies list" },
-  { label: "Analytics — Leaderboard, By Asset, Charts", to: "/analytics", keywords: "leaderboard results backtests runs by asset pairs coins charts top performers" },
-  { label: "Tesseract — market field & plan", to: "/tesseract", keywords: "tesseract field drive heat mass flow book microstructure plan" },
+  {
+    label: "Analytics — Leaderboard, By Asset, Charts",
+    to: "/analytics",
+    keywords: "leaderboard results backtests runs by asset pairs coins charts top performers",
+  },
+  {
+    label: "Tesseract — market field & plan",
+    to: "/tesseract",
+    keywords: "tesseract field drive heat mass flow book microstructure plan",
+  },
+  {
+    label: "Sub35 — low-ask strategy workbench",
+    to: "/sub35",
+    keywords: "sub35 under 35 cents polymarket low ask portfolio basket",
+  },
   { label: "Screens & Alerts", to: "/screens", keywords: "filters" },
-  { label: "Sweeps — launch & history", to: "/sweeps", keywords: "sweep new optimize runs matrix backtest history" },
-  { label: "Live — Subscriptions, Performance, Trades", to: "/live", keywords: "trading activate automations kill switch equity pnl fills ledger positions portfolio" },
-  { label: "Settings — connection & admin", to: "/settings", keywords: "api key credentials jester connection admin users timezone" },
+  {
+    label: "Sweeps — launch & history",
+    to: "/sweeps",
+    keywords: "sweep new optimize runs matrix backtest history",
+  },
+  {
+    label: "Live — Subscriptions, Performance, Trades",
+    to: "/live",
+    keywords:
+      "trading activate automations kill switch equity pnl fills ledger positions portfolio",
+  },
+  {
+    label: "Settings — connection & admin",
+    to: "/settings",
+    keywords: "api key credentials jester connection admin users timezone",
+  },
 ];
 
 interface Row {
@@ -75,7 +101,10 @@ export function CommandPalette() {
     // may have no backtest row at all (Jester reports 8-char live codes, we store 12-char on runs).
     for (const l of (search.data as any)?.live ?? []) {
       const active = !l.endedAt;
-      const when = new Date(l.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      const when = new Date(l.startedAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      });
       out.push({
         key: `l:${l.code}:${l.strategyId}:${l.pair}`,
         group: "Live parameter sets",
@@ -176,7 +205,9 @@ export function CommandPalette() {
 
   // Keep the highlighted row in view while arrowing through a long list.
   useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-idx="${active}"]`)?.scrollIntoView({ block: "nearest" });
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-idx="${active}"]`)
+      ?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
   if (!open) return null;
@@ -198,28 +229,31 @@ export function CommandPalette() {
 
   // Portal to body: <main> is overflow-y-auto, which clips fixed children (iOS Safari especially).
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[12vh]" onClick={() => setOpen(false)}>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[12vh]"
+      onClick={() => setOpen(false)}
+    >
       <div
-        className="w-full max-w-2xl overflow-hidden rounded-xl border bg-card shadow-2xl"
+        className="bg-card w-full max-w-2xl overflow-hidden rounded-xl border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b px-3">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <Search className="text-muted-foreground h-4 w-4 shrink-0" />
           <input
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search strategies, parameter codes, assets…"
-            className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="placeholder:text-muted-foreground h-12 w-full bg-transparent text-sm outline-none"
           />
-          {search.isFetching && <span className="text-xs text-muted-foreground">…</span>}
-          <kbd className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">esc</kbd>
+          {search.isFetching && <span className="text-muted-foreground text-xs">…</span>}
+          <kbd className="text-muted-foreground rounded border px-1.5 py-0.5 text-[10px]">esc</kbd>
         </div>
 
         <div ref={listRef} className="max-h-[52vh] overflow-y-auto py-1">
           {rows.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground px-4 py-6 text-center text-sm">
               {term ? `No matches for “${term}”.` : "Type to search — or paste a parameter code."}
             </p>
           ) : (
@@ -229,7 +263,7 @@ export function CommandPalette() {
               return (
                 <div key={r.key}>
                   {header && (
-                    <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <div className="text-muted-foreground px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide">
                       {header}
                     </div>
                   )}
@@ -242,12 +276,18 @@ export function CommandPalette() {
                       (i === active ? "bg-accent" : "hover:bg-accent/50")
                     }
                   >
-                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <Icon className="text-muted-foreground h-4 w-4 shrink-0" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm">{r.title}</span>
-                      {r.sub && <span className="block truncate font-mono text-[11px] text-muted-foreground">{r.sub}</span>}
+                      {r.sub && (
+                        <span className="text-muted-foreground block truncate font-mono text-[11px]">
+                          {r.sub}
+                        </span>
+                      )}
                     </span>
-                    {i === active && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                    {i === active && (
+                      <CornerDownLeft className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                    )}
                   </button>
                 </div>
               );
@@ -255,7 +295,7 @@ export function CommandPalette() {
           )}
         </div>
 
-        <div className="flex items-center gap-3 border-t px-3 py-1.5 text-[10px] text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-3 border-t px-3 py-1.5 text-[10px]">
           <span>↑↓ navigate</span>
           <span>↵ open</span>
           <span className="ml-auto">Paste a param code to jump to its exact cell</span>

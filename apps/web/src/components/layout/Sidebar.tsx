@@ -20,6 +20,7 @@ import {
   Target,
   FlaskConical,
   Binary,
+  BadgeCent,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/analytics", label: "Analytics", icon: Trophy, minRole: "viewer" },
   { to: "/tesseract", label: "Tesseract", icon: Boxes, minRole: "viewer" },
   { to: "/polymarket", label: "Polymarket", icon: Target, minRole: "viewer" },
+  { to: "/sub35", label: "Sub35", icon: BadgeCent, minRole: "viewer" },
   { to: "/formula-lab", label: "Formula Lab", icon: Binary, minRole: "viewer" },
   { to: "/crucible", label: "Crucible", icon: FlaskConical, minRole: "viewer" },
   { to: "/screens", label: "Screens & Alerts", icon: Radar, minRole: "viewer" },
@@ -67,12 +69,7 @@ interface SidebarProps {
   onCollapsedToggle: () => void;
 }
 
-export function Sidebar({
-  mobileOpen,
-  onMobileClose,
-  collapsed,
-  onCollapsedToggle,
-}: SidebarProps) {
+export function Sidebar({ mobileOpen, onMobileClose, collapsed, onCollapsedToggle }: SidebarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { data: me } = trpc.admin.me.useQuery(undefined, { staleTime: 60_000 });
   const myRank = ROLE_RANK[(me?.role as Role) ?? "viewer"] ?? 0;
@@ -82,7 +79,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "z-50 flex w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[transform,width] duration-200",
+        "bg-sidebar text-sidebar-foreground z-50 flex w-60 shrink-0 flex-col border-r transition-[transform,width] duration-200",
         // Mobile: fixed overlay, slides in/out. Desktop: static.
         "fixed inset-y-0 left-0 md:static md:translate-x-0",
         mobileOpen ? "translate-x-0" : "-translate-x-full",
@@ -91,7 +88,7 @@ export function Sidebar({
     >
       <div className="h-16 border-b">
         <div className="flex h-full items-center gap-2 px-4 md:hidden">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-lg">
             <Boxes className="h-4 w-4" />
           </div>
           <span className="font-semibold">Alchemy</span>
@@ -103,17 +100,17 @@ export function Sidebar({
           aria-expanded={!collapsed}
           title={`${collapsed ? "Expand" : "Collapse"} navigation (⌘B)`}
           className={cn(
-            "hidden h-full w-full items-center rounded-none px-4 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:flex",
+            "hover:bg-sidebar-accent focus-visible:ring-ring hidden h-full w-full items-center rounded-none px-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset md:flex",
             collapsed ? "justify-center px-2" : "gap-2",
           )}
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <span className="bg-primary text-primary-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
             <Boxes className="h-4 w-4" />
           </span>
           {!collapsed && (
             <>
               <span className="min-w-0 flex-1 truncate font-semibold">Alchemy</span>
-              <span className="text-xs font-normal text-muted-foreground">⌘B</span>
+              <span className="text-muted-foreground text-xs font-normal">⌘B</span>
             </>
           )}
         </button>
@@ -151,10 +148,10 @@ export function Sidebar({
         >
           <div className={cn(collapsed && "md:hidden")}>
             <p className="font-medium">{me.name}</p>
-            <p className="text-xs text-muted-foreground">{me.role}</p>
+            <p className="text-muted-foreground text-xs">{me.role}</p>
           </div>
           {collapsed && (
-            <div className="hidden h-10 items-center justify-center rounded-md bg-sidebar-accent font-mono text-xs font-semibold md:flex">
+            <div className="bg-sidebar-accent hidden h-10 items-center justify-center rounded-md font-mono text-xs font-semibold md:flex">
               {(me.name?.trim()?.[0] ?? me.role?.[0] ?? "J").toUpperCase()}
             </div>
           )}
