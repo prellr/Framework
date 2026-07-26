@@ -135,6 +135,7 @@ export const polymarketRouter = t.router({
       z.object({
         scope: z.enum(["paper", "forward", "history"]).default("paper"),
         timezone: z.string().min(1).max(64).default("America/Chicago"),
+        cohortKeys: z.array(z.string().min(3).max(160)).max(60).optional(),
       }),
     )
     .query(({ input }) => paperUnder35TradeHistory(input)),

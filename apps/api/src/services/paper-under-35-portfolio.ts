@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { db, paperTrades } from "@framework/db";
 import { PAPER_BOTS, paperBotBucketUniverse } from "./paper-floor.ts";
 import { paperPerformanceStartMs, type PaperPerformanceScope } from "./paper-performance.ts";
@@ -14,6 +14,7 @@ export interface PaperUnder35PortfolioInput {
 export interface PaperUnder35TradeHistoryInput {
   scope: PaperPerformanceScope;
   timezone: string;
+  cohortKeys?: string[];
 }
 
 type DailyRow = {
@@ -249,14 +250,21 @@ async function loadPaperUnder35TradeHistory(input: PaperUnder35TradeHistoryInput
   const firstDay = dayKeys[0] ?? currentDay;
   const scopeStartMs = paperPerformanceStartMs(input.scope, "all", nowMs);
   const indexedStartMs = Math.max(scopeStartMs ?? 0, nowMs - 8 * 86_400_000);
+  const requestedCohorts = input.cohortKeys ? new Set(input.cohortKeys) : null;
+  const selectedCohorts = registeredCohorts("all").filter(
+    (cohort) => !requestedCohorts || requestedCohorts.has(cohort.key),
+  );
+  const cohortCondition = selectedCohorts.length
+    ? or(
+        ...selectedCohorts.map((cohort) =>
+          and(eq(paperTrades.botKey, cohort.botKey), eq(paperTrades.horizonMin, cohort.horizonMin)),
+        ),
+      )
+    : sql`false`;
   const localTime = sql`timezone(${timezone}, ${paperTrades.windowStart} at time zone 'UTC')`;
   const localDay = sql<string>`to_char(${localTime}, 'YYYY-MM-DD')`;
   const condition = and(
-    inArray(
-      paperTrades.botKey,
-      PAPER_BOTS.map((bot) => bot.key),
-    ),
-    inArray(paperTrades.horizonMin, [...HORIZONS]),
+    cohortCondition,
     inArray(paperTrades.status, ["won", "lost"]),
     lt(paperTrades.askPaid, UNDER_35_MAX_ASK),
     gte(paperTrades.windowStart, new Date(indexedStartMs)),

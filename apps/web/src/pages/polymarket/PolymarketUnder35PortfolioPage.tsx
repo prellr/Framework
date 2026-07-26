@@ -728,14 +728,6 @@ export function PolymarketUnder35PortfolioPage() {
     { staleTime: 30_000, refetchInterval: 60_000 },
   );
   const data = query.data;
-  const historyQuery = trpc.polymarket.under35TradeHistory.useQuery(
-    { scope, timezone: "America/Chicago" },
-    {
-      enabled: Boolean(data),
-      staleTime: 120_000,
-      refetchInterval: 300_000,
-    },
-  );
   const allKeys = useMemo(
     () => new Set((data?.cohorts ?? []).map((cohort) => cohort.key)),
     [data?.cohorts],
@@ -745,6 +737,15 @@ export function PolymarketUnder35PortfolioPage() {
     (cohort) => horizon === "all" || cohort.horizonMin === horizon,
   );
   const selectedCohorts = horizonCohorts.filter((cohort) => selectedKeys.has(cohort.key));
+  const historyCohortKeys = selectedCohorts.map((cohort) => cohort.key).sort();
+  const historyQuery = trpc.polymarket.under35TradeHistory.useQuery(
+    { scope, timezone: "America/Chicago", cohortKeys: historyCohortKeys },
+    {
+      enabled: Boolean(data && historyCohortKeys.length),
+      staleTime: 120_000,
+      refetchInterval: 300_000,
+    },
+  );
   const selectedTrades = (historyQuery.data?.trades ?? []).filter(
     (trade) =>
       selectedKeys.has(trade.cohortKey) && (horizon === "all" || trade.horizonMin === horizon),

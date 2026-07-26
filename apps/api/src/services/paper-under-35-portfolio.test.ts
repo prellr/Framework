@@ -45,6 +45,8 @@ test("under-35 trade history is bounded, graded, and carries exact decision evid
   assert.match(service, /TRADE_HISTORY_LIMIT\s*=\s*10_000/);
   assert.match(service, /inArray\(paperTrades\.status,\s*\["won",\s*"lost"\]\)/);
   assert.match(service, /conditionId:\s*paperTrades\.conditionId/);
+  assert.match(service, /requestedCohorts\.has\(cohort\.key\)/);
+  assert.match(service, /eq\(paperTrades\.horizonMin,\s*cohort\.horizonMin\)/);
   assert.match(service, /windowStartMs:\s*row\.windowStart\.getTime\(\)/);
   assert.match(service, /decidedAtMs:\s*row\.decidedAt\.getTime\(\)/);
   assert.match(service, /ask:\s*ask/);
@@ -82,6 +84,7 @@ test("dedicated page groups selected trade history without deduplicating account
   assert.match(page, /Selected-cohort trade history/);
   assert.match(page, /Market window/);
   assert.match(page, /Calendar day/);
+  assert.match(page, /cohortKeys:\s*historyCohortKeys/);
   assert.match(page, /selectedKeys\.has\(trade\.cohortKey\)/);
   assert.match(page, /`\$\{trade\.conditionId\}:\$\{trade\.side\}`/);
   assert.match(page, /overlapping strategy decisions/);
