@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  BadgeCheck,
   CircleAlert,
   ExternalLink,
   LockKeyhole,
@@ -123,6 +124,7 @@ export function PolymarketAccountsPage() {
   });
   const setDefault = trpc.polymarketAccounts.setDefault.useMutation({ onSuccess: refresh });
   const remove = trpc.polymarketAccounts.remove.useMutation({ onSuccess: refresh });
+  const verify = trpc.polymarketAccounts.verify.useMutation({ onSuccess: refresh });
 
   const save = () => {
     const values = {
@@ -206,6 +208,8 @@ export function PolymarketAccountsPage() {
     value == null ? "not configured" : `${value.toLocaleString()} ms`;
   const conservativeValue = (fallback: number, maximum: number | null | undefined) =>
     String(maximum == null ? fallback : Math.min(fallback, maximum));
+  const verifiedCount =
+    accounts.data?.accounts.filter((account) => account.status === "verified").length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -236,7 +240,11 @@ export function PolymarketAccountsPage() {
           </div>
           <div className="rounded-lg border p-3">
             <div className="text-muted-foreground text-xs">Account verification</div>
-            <div className="mt-1 font-medium">Not installed yet</div>
+            <div className="mt-1 font-medium">
+              {accounts.data?.verificationAvailable
+                ? `${verifiedCount} of ${accounts.data.accounts.length} verified`
+                : "Unavailable"}
+            </div>
           </div>
           <div className="rounded-lg border p-3">
             <div className="text-muted-foreground text-xs">Order execution</div>
@@ -244,6 +252,22 @@ export function PolymarketAccountsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {accounts.data?.verificationAvailable ? (
+        <div className="border-primary/20 bg-primary/5 flex items-start gap-3 rounded-lg border p-4">
+          <BadgeCheck className="text-primary mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium">Read-only account verification</p>
+            <p className="text-muted-foreground mt-1 max-w-4xl text-xs leading-relaxed">
+              Verify confirms that the encrypted private key derives the recorded signer, that
+              Polymarket resolves the expected wallet and wallet type, and that authenticated CLOB
+              and Relayer reads succeed. Polymarket may create or derive API credentials during
+              authentication. Alchemy does not prepare, sign, submit, approve, or cancel an order,
+              and order execution remains locked.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {formOpen ? (
         <Card>
@@ -503,7 +527,9 @@ export function PolymarketAccountsPage() {
                       {account.walletType.toUpperCase()} · {account.walletMasked}
                     </CardDescription>
                   </div>
-                  <Badge variant="secondary">{account.status}</Badge>
+                  <Badge variant={account.status === "verified" ? "success" : "secondary"}>
+                    {account.status}
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -538,7 +564,31 @@ export function PolymarketAccountsPage() {
                     <div className="mt-1 font-medium">{account.maxBookAgeMs} ms</div>
                   </div>
                 </div>
+                {account.lastVerifiedAt ? (
+                  <p className="text-muted-foreground text-xs">
+                    Last verified {new Date(account.lastVerifiedAt).toLocaleString()}
+                  </p>
+                ) : null}
+                {account.lastVerificationError ? (
+                  <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-md border p-3 text-xs leading-relaxed">
+                    {account.lastVerificationError}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
+                  {accounts.data?.verificationAvailable ? (
+                    <Button
+                      size="sm"
+                      disabled={verify.isPending}
+                      onClick={() => verify.mutate({ id: account.id })}
+                    >
+                      <BadgeCheck className="mr-2 h-3.5 w-3.5" />
+                      {verify.isPending && verify.variables?.id === account.id
+                        ? "Verifying…"
+                        : account.status === "verified"
+                          ? "Verify again"
+                          : "Verify account"}
+                    </Button>
+                  ) : null}
                   <Button size="sm" variant="outline" onClick={() => beginEdit(account)}>
                     <Pencil className="mr-2 h-3.5 w-3.5" />
                     Edit
@@ -573,6 +623,9 @@ export function PolymarketAccountsPage() {
                     Remove
                   </Button>
                 </div>
+                {verify.error && verify.variables?.id === account.id ? (
+                  <p className="text-destructive text-sm">{verify.error.message}</p>
+                ) : null}
               </CardContent>
             </Card>
           ))}

@@ -6,8 +6,12 @@ import { db, polymarketAccounts } from "@framework/db";
 import { t } from "../trpc/context.ts";
 import { humanProcedure } from "../trpc/middleware.ts";
 import { audit } from "../services/audit.ts";
-import { seal } from "../services/crypto.ts";
+import { open, seal } from "../services/crypto.ts";
 import { getSetting } from "../services/config.ts";
+import {
+  publicPolymarketVerificationError,
+  verifyPolymarketAccount,
+} from "../services/polymarket-account-verification.ts";
 
 const evmAddress = z
   .string()
@@ -150,7 +154,7 @@ export const polymarketAccountsRouter = t.router({
     return {
       accounts: rows.map(publicAccount),
       executionAvailable: false,
-      verificationAvailable: false,
+      verificationAvailable: true,
       builderManagedProvisioningAvailable: false,
     };
   }),
@@ -295,6 +299,85 @@ export const polymarketAccountsRouter = t.router({
     });
     return { success: true };
   }),
+
+  verify: humanProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const current = await accountForUser(input.id, ctx.user.id);
+
+      try {
+        const [signerPrivateKeyValue, relayerApiKeyValue] = await Promise.all([
+          open({
+            encryptedKey: current.encryptedSignerKey,
+            keyNonce: current.signerKeyNonce,
+          }),
+          open({
+            encryptedKey: current.encryptedRelayerApiKey,
+            keyNonce: current.relayerApiKeyNonce,
+          }),
+        ]);
+        const checks = await verifyPolymarketAccount({
+          walletType: current.walletType,
+          walletAddress: current.walletAddress,
+          signerAddress: current.signerAddress,
+          signerPrivateKey: signerPrivateKeyValue,
+          relayerApiKey: relayerApiKeyValue,
+        });
+        const verifiedAt = new Date();
+        await db
+          .update(polymarketAccounts)
+          .set({
+            status: "verified",
+            lastVerifiedAt: verifiedAt,
+            lastVerificationError: null,
+            updatedAt: verifiedAt,
+          })
+          .where(
+            and(eq(polymarketAccounts.id, input.id), eq(polymarketAccounts.userId, ctx.user.id)),
+          );
+        await audit(ctx, "polymarketAccounts.verify", {
+          resourceType: "polymarket_account",
+          resourceId: input.id,
+          newValue: {
+            status: "verified",
+            signerMatches: checks.signerMatches,
+            walletMatches: checks.walletMatches,
+            walletTypeMatches: checks.walletTypeMatches,
+            clobAuthentication: checks.clobAuthentication,
+            relayerAuthentication: checks.relayerAuthentication,
+            walletDeployed: checks.walletDeployed,
+          },
+        });
+        return { verifiedAt, checks };
+      } catch (error) {
+        const publicMessage = publicPolymarketVerificationError(error);
+        const failedAt = new Date();
+        await db
+          .update(polymarketAccounts)
+          .set({
+            status: "error",
+            lastVerifiedAt: null,
+            lastVerificationError: publicMessage,
+            updatedAt: failedAt,
+          })
+          .where(
+            and(eq(polymarketAccounts.id, input.id), eq(polymarketAccounts.userId, ctx.user.id)),
+          );
+        await audit(ctx, "polymarketAccounts.verifyFailed", {
+          resourceType: "polymarket_account",
+          resourceId: input.id,
+          newValue: {
+            status: "error",
+            failureClass: error instanceof Error ? error.name : "UnknownError",
+          },
+        });
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: publicMessage,
+          cause: error,
+        });
+      }
+    }),
 
   setDefault: humanProcedure
     .input(z.object({ id: z.string().uuid() }))
