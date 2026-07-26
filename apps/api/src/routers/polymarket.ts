@@ -1,5 +1,5 @@
 import { t } from "../trpc/context.ts";
-import { protectedProcedure } from "../trpc/middleware.ts";
+import { managerProcedure, protectedProcedure } from "../trpc/middleware.ts";
 import { scoreboard, scoreSeries } from "../services/polymarket-updown.ts";
 import { floorState, paperAssetFeed, paperStrategyFeed } from "../services/paper-floor.ts";
 import { paperFloorView } from "../services/paper-floor-view.ts";
@@ -119,7 +119,7 @@ export const polymarketRouter = t.router({
     .query(({ input }) => paperExecutionCapital(input)),
   // Exact registered strategy × timeframe roster with seven local-calendar-day `<35¢` RAW cells.
   // Selection happens only in the browser research workspace; no paper or execution mutation exists.
-  under35Portfolio: protectedProcedure
+  under35Portfolio: managerProcedure
     .input(
       z.object({
         scope: z.enum(["paper", "forward", "history"]).default("paper"),
@@ -130,7 +130,7 @@ export const polymarketRouter = t.router({
     .query(({ input }) => paperUnder35Portfolio(input)),
   // Bounded read-only ledger for the same seven-day `<35¢` population. The browser filters the
   // exact registered cohort selection and groups rows by market window, hour, or calendar day.
-  under35TradeHistory: protectedProcedure
+  under35TradeHistory: managerProcedure
     .input(
       z.object({
         scope: z.enum(["paper", "forward", "history"]).default("paper"),

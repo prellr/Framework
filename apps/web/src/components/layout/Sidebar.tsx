@@ -25,41 +25,34 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
-
-type Role = "viewer" | "operator" | "manager" | "admin";
-
-const ROLE_RANK: Record<Role, number> = {
-  viewer: 0,
-  operator: 1,
-  manager: 2,
-  admin: 3,
-};
+import {
+  canAccessSection,
+  type Role,
+  type SectionAccess,
+  type SectionKey,
+} from "@/lib/section-access";
 
 interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
-  /** Minimum role required to see this item */
-  minRole: Role;
+  section: SectionKey;
 }
 
-// Add your app's sections here. minRole hides the item from lower roles;
-// the actual enforcement is server-side in the tRPC procedures plus the
-// route-level requireRole() in router.tsx.
 const NAV_ITEMS: NavItem[] = [
-  { to: "/dashboard", label: "Overview", icon: LayoutDashboard, minRole: "viewer" },
-  { to: "/catalog", label: "Strategies", icon: LineChart, minRole: "viewer" },
-  { to: "/sweeps", label: "Sweeps", icon: Rocket, minRole: "operator" },
-  { to: "/analytics", label: "Analytics", icon: Trophy, minRole: "viewer" },
-  { to: "/tesseract", label: "Tesseract", icon: Boxes, minRole: "viewer" },
-  { to: "/polymarket", label: "Polymarket", icon: Target, minRole: "viewer" },
-  { to: "/sub35", label: "Sub35", icon: BadgeCent, minRole: "viewer" },
-  { to: "/formula-lab", label: "Formula Lab", icon: Binary, minRole: "viewer" },
-  { to: "/crucible", label: "Crucible", icon: FlaskConical, minRole: "viewer" },
-  { to: "/screens", label: "Screens & Alerts", icon: Radar, minRole: "viewer" },
-  { to: "/knowledge", label: "Knowledge", icon: BookOpen, minRole: "viewer" },
-  { to: "/live", label: "Live", icon: Zap, minRole: "viewer" },
-  { to: "/settings", label: "Settings", icon: KeyRound, minRole: "viewer" },
+  { to: "/dashboard", label: "Overview", icon: LayoutDashboard, section: "overview" },
+  { to: "/catalog", label: "Strategies", icon: LineChart, section: "strategies" },
+  { to: "/sweeps", label: "Sweeps", icon: Rocket, section: "sweeps" },
+  { to: "/analytics", label: "Analytics", icon: Trophy, section: "analytics" },
+  { to: "/tesseract", label: "Tesseract", icon: Boxes, section: "tesseract" },
+  { to: "/polymarket", label: "Polymarket", icon: Target, section: "polymarket" },
+  { to: "/sub35", label: "Sub35", icon: BadgeCent, section: "sub35" },
+  { to: "/formula-lab", label: "Formula Lab", icon: Binary, section: "formulaLab" },
+  { to: "/crucible", label: "Crucible", icon: FlaskConical, section: "crucible" },
+  { to: "/screens", label: "Screens & Alerts", icon: Radar, section: "screens" },
+  { to: "/knowledge", label: "Knowledge", icon: BookOpen, section: "knowledge" },
+  { to: "/live", label: "Live", icon: Zap, section: "live" },
+  { to: "/settings", label: "Settings", icon: KeyRound, section: "settings" },
 ];
 
 interface SidebarProps {
@@ -72,9 +65,14 @@ interface SidebarProps {
 export function Sidebar({ mobileOpen, onMobileClose, collapsed, onCollapsedToggle }: SidebarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { data: me } = trpc.admin.me.useQuery(undefined, { staleTime: 60_000 });
-  const myRank = ROLE_RANK[(me?.role as Role) ?? "viewer"] ?? 0;
+  const { data: sectionAccess } = trpc.admin.sectionAccess.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+  const role = (me?.role as Role) ?? "viewer";
 
-  const visibleItems = NAV_ITEMS.filter((item) => myRank >= ROLE_RANK[item.minRole]);
+  const visibleItems = NAV_ITEMS.filter((item) =>
+    canAccessSection(role, item.section, sectionAccess?.access as SectionAccess | undefined),
+  );
 
   return (
     <aside

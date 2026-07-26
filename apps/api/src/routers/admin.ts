@@ -7,6 +7,11 @@ import type { Role } from "@framework/db";
 import { auth } from "../auth.ts";
 import { getSetting, isSecretSetting, setSetting } from "../services/config.ts";
 import { audit } from "../services/audit.ts";
+import {
+  getSectionAccess,
+  saveSectionAccess,
+  sectionAccessView,
+} from "../services/section-access.ts";
 
 const roleEnum = z.enum(["admin", "manager", "operator", "viewer"]);
 
@@ -197,6 +202,29 @@ export const adminRouter = t.router({
     role: (ctx.user as { role?: Role }).role ?? "viewer",
     timezone: (ctx.user as { timezone?: string | null }).timezone ?? null,
   })),
+
+  // Role-to-section visibility contract for every authenticated user. This contains no secrets.
+  // Route visibility is separate from action authorization: privileged mutations retain their
+  // fixed operator/manager/admin middleware even when a section is visible.
+  sectionAccess: protectedProcedure.query(async () =>
+    sectionAccessView(await getSectionAccess()),
+  ),
+
+  // Admin-managed page visibility by role. Hard floors are normalized server-side so Sub35 can
+  // never be exposed below manager and Sweeps can never be exposed below operator.
+  updateSectionAccess: adminProcedure
+    .input(z.object({ access: z.record(z.string(), roleEnum) }))
+    .mutation(async ({ input, ctx }) => {
+      const previous = await getSectionAccess();
+      const next = await saveSectionAccess(input.access);
+      await audit(ctx, "admin.updateSectionAccess", {
+        resourceType: "section_access",
+        resourceId: "role_matrix",
+        oldValue: previous,
+        newValue: next,
+      });
+      return sectionAccessView(next);
+    }),
 
   /**
    * Set the caller's display timezone (IANA name). Calendar-day bucketing happens server-side in

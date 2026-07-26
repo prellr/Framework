@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import type { RouterOutput } from "@framework/api/router";
-import { UserPlus, KeyRound, Trash2, Save, History, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  UserPlus,
+  KeyRound,
+  Trash2,
+  Save,
+  History,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,10 +27,11 @@ import {
   type SortState,
   type SortValue,
 } from "@/pages/polymarket/PolymarketSortableHeader";
+import { ROLE_RANK, type Role, type SectionKey } from "@/lib/section-access";
 
 const ROLES = ["viewer", "operator", "manager", "admin"] as const;
 type RoleOption = (typeof ROLES)[number];
-type AdminTab = "users" | "login-history" | "settings";
+type AdminTab = "users" | "section-access" | "login-history" | "settings";
 type LoginEvent = RouterOutput["admin"]["loginHistory"]["events"][number];
 type LoginSortKey = "at" | "user" | "method" | "ip" | "agent";
 
@@ -51,6 +61,7 @@ export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
         {(
           [
             ["users", "Users"],
+            ["section-access", "Section access"],
             ["login-history", "Login history"],
             ["settings", "Settings"],
           ] as const
@@ -72,6 +83,8 @@ export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
 
       {tab === "users" ? (
         <UsersTab />
+      ) : tab === "section-access" ? (
+        <SectionAccessTab />
       ) : tab === "login-history" ? (
         <LoginHistoryTab />
       ) : (
@@ -81,6 +94,129 @@ export function AdminPage({ embedded }: { embedded?: boolean } = {}) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Section access ────────────────────────────────────────────────────────────
+
+function SectionAccessTab() {
+  const utils = trpc.useUtils();
+  const contract = trpc.admin.sectionAccess.useQuery();
+  const [draft, setDraft] = useState<Partial<Record<SectionKey, Role>>>({});
+  const update = trpc.admin.updateSectionAccess.useMutation({
+    onSuccess: async () => {
+      setDraft({});
+      await utils.admin.sectionAccess.invalidate();
+    },
+  });
+
+  const sections = contract.data?.sections ?? [];
+  const roles: readonly Role[] = ["viewer", "operator", "manager", "admin"];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4" />
+          Page access by role
+        </CardTitle>
+        <CardDescription>
+          Choose the lowest role that may see and open each section. Users inherit this access from
+          the role assigned in the Users tab. API mutations and other privileged actions keep their
+          existing fixed authorization checks.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {contract.isLoading ? (
+          <div className="bg-muted/20 h-80 animate-pulse rounded-lg" />
+        ) : contract.isError ? (
+          <p className="text-destructive text-sm">
+            Section access is unavailable: {contract.error.message}
+          </p>
+        ) : (
+          <div className="divide-y overflow-hidden rounded-lg border">
+            {sections.map((section) => {
+              const selected = draft[section.key as SectionKey] ?? section.minRole;
+              return (
+                <div
+                  key={section.key}
+                  className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{section.label}</p>
+                      {section.hardFloor !== "viewer" && (
+                        <Badge variant="secondary">Hard floor: {section.hardFloor}</Badge>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-sm">{section.description}</p>
+                  </div>
+                  <div>
+                    <Label htmlFor={`section-access-${section.key}`} className="text-xs">
+                      Minimum role
+                    </Label>
+                    <select
+                      id={`section-access-${section.key}`}
+                      value={selected}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          [section.key]: event.target.value as Role,
+                        }))
+                      }
+                      className="border-input mt-1 flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm"
+                    >
+                      {roles
+                        .filter((role) => ROLE_RANK[role] >= ROLE_RANK[section.hardFloor as Role])
+                        .map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            disabled={update.isPending || sections.length === 0 || Object.keys(draft).length === 0}
+            onClick={() =>
+              update.mutate({
+                access: Object.fromEntries(
+                  sections.map((section) => [
+                    section.key,
+                    draft[section.key as SectionKey] ?? section.minRole,
+                  ]),
+                ),
+              })
+            }
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {update.isPending ? "Saving…" : "Save page access"}
+          </Button>
+          {Object.keys(draft).length > 0 && (
+            <Button variant="outline" onClick={() => setDraft({})}>
+              Reset unsaved changes
+            </Button>
+          )}
+          {update.isSuccess && (
+            <span className="text-emerald-500 text-sm">Page access saved.</span>
+          )}
+          {update.error && (
+            <span className="text-destructive text-sm">{update.error.message}</span>
+          )}
+        </div>
+
+        <div className="bg-muted/20 text-muted-foreground rounded-lg border px-4 py-3 text-xs leading-relaxed">
+          Sub35 always requires manager or admin access. Sweeps always requires operator or above.
+          These hard floors cannot be lowered from this screen.
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

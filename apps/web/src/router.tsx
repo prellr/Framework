@@ -33,23 +33,23 @@ import { PortfolioPage } from "./pages/account/PortfolioPage";
 import { PositionsPage } from "./pages/account/PositionsPage";
 import { TradingPage } from "./pages/trading/TradingPage";
 import { AdminPage } from "./pages/admin/AdminPage";
-
-const ROLE_RANK: Record<string, number> = {
-  viewer: 0,
-  operator: 1,
-  manager: 2,
-  admin: 3,
-};
+import {
+  canAccessSection,
+  loadSectionAccess,
+  type Role,
+  type SectionKey,
+} from "./lib/section-access";
 
 /**
  * Client-side role gate for routes (redirects). This is a UX nicety only —
  * real enforcement is the role middleware on the tRPC procedures.
  */
-async function requireRole(minRole: string) {
+async function requireSection(section: SectionKey) {
   const session = await authClient.getSession();
   if (!session.data) throw redirect({ to: "/login" });
-  const rank = ROLE_RANK[(session.data.user as { role?: string }).role ?? "viewer"] ?? 0;
-  if (rank < ROLE_RANK[minRole]) throw redirect({ to: "/dashboard" });
+  const role = ((session.data.user as { role?: Role }).role ?? "viewer") as Role;
+  const access = await loadSectionAccess();
+  if (!canAccessSection(role, section, access)) throw redirect({ to: "/dashboard" });
 }
 
 const rootRoute = createRootRoute({
@@ -92,36 +92,42 @@ const indexRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/",
   component: DashboardPage,
+  beforeLoad: () => requireSection("overview"),
 });
 
 const dashboardRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/dashboard",
   component: DashboardPage,
+  beforeLoad: () => requireSection("overview"),
 });
 
 const notesRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/notes",
   component: NotesPage,
+  beforeLoad: () => requireSection("knowledge"),
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/settings",
   component: SettingsPage,
+  beforeLoad: () => requireSection("settings"),
 });
 
 const catalogRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/catalog",
   component: CatalogPage,
+  beforeLoad: () => requireSection("strategies"),
 });
 
 const strategyDetailRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/strategy/$strategyId",
   component: StrategyDetailPage,
+  beforeLoad: () => requireSection("strategies"),
   // Optional cell context, so links from By Asset / Results open the page already pointed at the
   // pair · timeframe · window you were looking at instead of resetting to the best result.
   // Optional-by-omission so plain links (no cell context) stay valid with `search={{}}`.
@@ -138,12 +144,14 @@ const sweepsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/sweeps",
   component: SweepsPage,
+  beforeLoad: () => requireSection("sweeps"),
 });
 
 const sweepsHistoryRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/sweeps/history",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("sweeps");
     throw redirect({ to: "/sweeps" });
   },
   component: SweepsHistory,
@@ -153,6 +161,7 @@ const sweepDetailRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/sweeps/$sweepId",
   component: SweepDetail,
+  beforeLoad: () => requireSection("sweeps"),
 });
 
 // Unified Analytics surface (UX restructure). Old analysis routes redirect here.
@@ -160,11 +169,13 @@ const analyticsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/analytics",
   component: AnalyticsPage,
+  beforeLoad: () => requireSection("analytics"),
 });
 const resultsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/results",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("analytics");
     throw redirect({ to: "/analytics" });
   },
   component: ResultsExplorer,
@@ -174,30 +185,35 @@ const tesseractRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/tesseract",
   component: TesseractPage,
+  beforeLoad: () => requireSection("tesseract"),
 });
 
 const knowledgeRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/knowledge",
   component: KnowledgePage,
+  beforeLoad: () => requireSection("knowledge"),
 });
 
 const polymarketRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket",
   component: PolymarketPage,
+  beforeLoad: () => requireSection("polymarket"),
 });
 
 const sub35Route = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/sub35",
   component: PolymarketUnder35PortfolioPage,
+  beforeLoad: () => requireSection("sub35"),
 });
 
 const polymarketUnder35Route = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/under-35",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("sub35");
     throw redirect({ to: "/sub35" });
   },
   component: PolymarketUnder35PortfolioPage,
@@ -207,12 +223,14 @@ const crucibleRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/crucible",
   component: CruciblePage,
+  beforeLoad: () => requireSection("crucible"),
 });
 
 const polymarketStrategyRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/strategy/$botKey",
   component: PolymarketStrategyDetailPage,
+  beforeLoad: () => requireSection("polymarket"),
   validateSearch: (
     search: Record<string, unknown>,
   ): {
@@ -251,6 +269,7 @@ const polymarketAssetRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/asset/$asset",
   component: PolymarketAssetDetailPage,
+  beforeLoad: () => requireSection("polymarket"),
   validateSearch: (
     search: Record<string, unknown>,
   ): {
@@ -283,30 +302,35 @@ const formulaLabRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/formula-lab",
   component: () => <FormulaLabPage view="overview" />,
+  beforeLoad: () => requireSection("formulaLab"),
 });
 
 const formulaLabFormulasRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/formula-lab/formulas",
   component: () => <FormulaLabPage view="formulas" />,
+  beforeLoad: () => requireSection("formulaLab"),
 });
 
 const formulaLabExperimentsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/formula-lab/experiments",
   component: () => <FormulaLabPage view="experiments" />,
+  beforeLoad: () => requireSection("formulaLab"),
 });
 
 const formulaLabSystemRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/formula-lab/system",
   component: () => <FormulaLabPage view="system" />,
+  beforeLoad: () => requireSection("formulaLab"),
 });
 
 const legacyPolymarketFormulaLabRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/polymarket/formula-lab",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("formulaLab");
     throw redirect({ to: "/formula-lab" });
   },
   component: FormulaLabPage,
@@ -315,7 +339,8 @@ const legacyPolymarketFormulaLabRoute = createRoute({
 const leaderboardRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/leaderboard",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("analytics");
     throw redirect({ to: "/analytics" });
   },
   component: LeaderboardPage,
@@ -324,7 +349,8 @@ const leaderboardRoute = createRoute({
 const assetsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/assets",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("analytics");
     throw redirect({ to: "/analytics" });
   },
   component: AssetsPage,
@@ -334,12 +360,14 @@ const screensRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/screens",
   component: ScreensPage,
+  beforeLoad: () => requireSection("screens"),
 });
 
 const chartsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/charts",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("analytics");
     throw redirect({ to: "/analytics" });
   },
   component: ChartsPage,
@@ -350,11 +378,13 @@ const liveRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/live",
   component: LivePage,
+  beforeLoad: () => requireSection("live"),
 });
 const portfolioRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/portfolio",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("live");
     throw redirect({ to: "/live" });
   },
   component: PortfolioPage,
@@ -363,7 +393,8 @@ const portfolioRoute = createRoute({
 const positionsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/positions",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("live");
     throw redirect({ to: "/live" });
   },
   component: PositionsPage,
@@ -372,7 +403,8 @@ const positionsRoute = createRoute({
 const tradingRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/trading",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("live");
     throw redirect({ to: "/live" });
   },
   component: TradingPage,
@@ -381,7 +413,8 @@ const tradingRoute = createRoute({
 const adminRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/admin",
-  beforeLoad: () => {
+  beforeLoad: async () => {
+    await requireSection("settings");
     throw redirect({ to: "/settings" });
   },
   component: AdminPage,

@@ -18,7 +18,7 @@ test("under-35 view preserves the exact registered strategy-timeframe roster", (
   assert.match(service, /PAPER_BOTS\.flatMap/);
   assert.match(service, /paperBotBucketUniverse\(bot\)/);
   assert.match(service, /key:\s*`\$\{bot\.key\}:\$\{horizonMin\}`/);
-  assert.match(router, /under35Portfolio:\s*protectedProcedure[\s\S]*?\.query/);
+  assert.match(router, /under35Portfolio:\s*managerProcedure[\s\S]*?\.query/);
 });
 
 test("under-35 evidence uses the recorded fee-adjusted ask and seven local dates", () => {
@@ -41,7 +41,7 @@ test("under-35 evidence uses the recorded fee-adjusted ask and seven local dates
 });
 
 test("under-35 trade history is bounded, graded, and carries exact decision evidence", () => {
-  assert.match(router, /under35TradeHistory:\s*protectedProcedure[\s\S]*?\.query/);
+  assert.match(router, /under35TradeHistory:\s*managerProcedure[\s\S]*?\.query/);
   assert.match(service, /TRADE_HISTORY_LIMIT\s*=\s*10_000/);
   assert.match(service, /inArray\(paperTrades\.status,\s*\["won",\s*"lost"\]\)/);
   assert.match(service, /conditionId:\s*paperTrades\.conditionId/);

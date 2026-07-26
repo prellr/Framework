@@ -4,42 +4,93 @@ import { useNavigate } from "@tanstack/react-router";
 import { Search, Boxes, Hash, Coins, ArrowRight, CornerDownLeft, Zap } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { pfLabel } from "@/lib/metrics";
+import {
+  canAccessSection,
+  type Role,
+  type SectionAccess,
+  type SectionKey,
+} from "@/lib/section-access";
 
 /** Static destinations, so ⌘K also works as a jump-to-page. */
-const PAGES: { label: string; to: string; keywords: string }[] = [
-  { label: "Overview", to: "/dashboard", keywords: "home dashboard pulse" },
-  { label: "Strategies", to: "/catalog", keywords: "catalog strategies list" },
+const PAGES: { label: string; to: string; keywords: string; section: SectionKey }[] = [
+  {
+    label: "Overview",
+    to: "/dashboard",
+    keywords: "home dashboard pulse",
+    section: "overview",
+  },
+  {
+    label: "Strategies",
+    to: "/catalog",
+    keywords: "catalog strategies list",
+    section: "strategies",
+  },
   {
     label: "Analytics — Leaderboard, By Asset, Charts",
     to: "/analytics",
     keywords: "leaderboard results backtests runs by asset pairs coins charts top performers",
+    section: "analytics",
   },
   {
     label: "Tesseract — market field & plan",
     to: "/tesseract",
     keywords: "tesseract field drive heat mass flow book microstructure plan",
+    section: "tesseract",
+  },
+  {
+    label: "Polymarket",
+    to: "/polymarket",
+    keywords: "polymarket up down scoreboard strategy lab",
+    section: "polymarket",
   },
   {
     label: "Sub35 — low-ask strategy workbench",
     to: "/sub35",
     keywords: "sub35 under 35 cents polymarket low ask portfolio basket",
+    section: "sub35",
   },
-  { label: "Screens & Alerts", to: "/screens", keywords: "filters" },
+  {
+    label: "Formula Lab",
+    to: "/formula-lab",
+    keywords: "formula algorithm research experiments",
+    section: "formulaLab",
+  },
+  {
+    label: "Crucible",
+    to: "/crucible",
+    keywords: "crucible targets discovery collections",
+    section: "crucible",
+  },
+  {
+    label: "Screens & Alerts",
+    to: "/screens",
+    keywords: "filters",
+    section: "screens",
+  },
+  {
+    label: "Knowledge",
+    to: "/knowledge",
+    keywords: "research findings notes knowledge base",
+    section: "knowledge",
+  },
   {
     label: "Sweeps — launch & history",
     to: "/sweeps",
     keywords: "sweep new optimize runs matrix backtest history",
+    section: "sweeps",
   },
   {
     label: "Live — Subscriptions, Performance, Trades",
     to: "/live",
     keywords:
       "trading activate automations kill switch equity pnl fills ledger positions portfolio",
+    section: "live",
   },
   {
     label: "Settings — connection & admin",
     to: "/settings",
     keywords: "api key credentials jester connection admin users timezone",
+    section: "settings",
   },
 ];
 
@@ -66,6 +117,12 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { data: me } = trpc.admin.me.useQuery(undefined, { staleTime: 60_000 });
+  const { data: sectionAccess } = trpc.admin.sectionAccess.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+  const role = (me?.role as Role) ?? "viewer";
+  const access = sectionAccess?.access as SectionAccess | undefined;
 
   // Global hotkey: ⌘K / Ctrl-K to open, Esc to close.
   useEffect(() => {
@@ -184,7 +241,10 @@ export function CommandPalette() {
     }
 
     for (const pg of PAGES) {
-      if (!t || pg.label.toLowerCase().includes(t) || pg.keywords.includes(t)) {
+      if (
+        canAccessSection(role, pg.section, access) &&
+        (!t || pg.label.toLowerCase().includes(t) || pg.keywords.includes(t))
+      ) {
         out.push({
           key: `pg:${pg.to}`,
           group: "Go to",
@@ -199,7 +259,7 @@ export function CommandPalette() {
       }
     }
     return out;
-  }, [search.data, term, navigate]);
+  }, [search.data, term, navigate, role, access]);
 
   useEffect(() => setActive(0), [rows.length]);
 
