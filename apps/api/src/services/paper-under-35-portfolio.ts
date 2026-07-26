@@ -9,12 +9,14 @@ export interface PaperUnder35PortfolioInput {
   scope: PaperPerformanceScope;
   horizon: PaperUnder35Horizon;
   timezone: string;
+  assets?: string[];
 }
 
 export interface PaperUnder35TradeHistoryInput {
   scope: PaperPerformanceScope;
   timezone: string;
   cohortKeys?: string[];
+  assets?: string[];
 }
 
 type DailyRow = {
@@ -109,6 +111,14 @@ async function loadPaperUnder35Portfolio(input: PaperUnder35PortfolioInput, nowM
     gte(paperTrades.windowStart, new Date(indexedStartMs)),
     sql`(${localTime})::date >= ${firstDay}::date`,
     ...(input.horizon === "all" ? [] : [eq(paperTrades.horizonMin, input.horizon)]),
+    ...(input.assets?.length
+      ? [
+          inArray(
+            paperTrades.pair,
+            input.assets.map((asset) => `${asset}-USD`),
+          ),
+        ]
+      : []),
   ) as SQL;
 
   const rowsResult = await db.execute(sql`
@@ -269,6 +279,14 @@ async function loadPaperUnder35TradeHistory(input: PaperUnder35TradeHistoryInput
     lt(paperTrades.askPaid, UNDER_35_MAX_ASK),
     gte(paperTrades.windowStart, new Date(indexedStartMs)),
     sql`(${localTime})::date >= ${firstDay}::date`,
+    ...(input.assets?.length
+      ? [
+          inArray(
+            paperTrades.pair,
+            input.assets.map((asset) => `${asset}-USD`),
+          ),
+        ]
+      : []),
   ) as SQL;
 
   const rows = await db

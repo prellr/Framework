@@ -125,6 +125,11 @@ export const polymarketRouter = t.router({
         scope: z.enum(["paper", "forward", "history"]).default("paper"),
         horizon: z.union([z.literal("all"), z.literal(5), z.literal(15)]).default("all"),
         timezone: z.string().min(1).max(64).default("America/Chicago"),
+        assets: z
+          .array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]))
+          .min(1)
+          .max(6)
+          .optional(),
       }),
     )
     .query(({ input }) => paperUnder35Portfolio(input)),
@@ -136,6 +141,11 @@ export const polymarketRouter = t.router({
         scope: z.enum(["paper", "forward", "history"]).default("paper"),
         timezone: z.string().min(1).max(64).default("America/Chicago"),
         cohortKeys: z.array(z.string().min(3).max(160)).max(60).optional(),
+        assets: z
+          .array(z.enum(["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"]))
+          .min(1)
+          .max(6)
+          .optional(),
       }),
     )
     .query(({ input }) => paperUnder35TradeHistory(input)),

@@ -36,11 +36,13 @@ type Under35Trade = TradeHistoryData["trades"][number];
 type TradeGroupMode = "window" | "hour" | "day";
 type RosterMetric = "raw" | "trades" | "winRate";
 type StakeUsd = 5 | 10 | 20 | 50;
+type AssetKey = "BTC" | "ETH" | "SOL" | "XRP" | "DOGE" | "BNB";
 type SortKey =
   "included" | "strategy" | "timeframe" | "n" | "winRate" | "average" | "rawNet" | `day:${string}`;
 
 const SELECTION_STORAGE_KEY = "alchemy.polymarket.under35.selected-cohorts.v1";
 const WORKSPACE_STORAGE_KEY = "alchemy.polymarket.under35.workspace.v1";
+const ASSETS: readonly AssetKey[] = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB"];
 
 type StoredWorkspace = {
   scope: ScopeKey;
@@ -49,6 +51,7 @@ type StoredWorkspace = {
   rosterMetric: RosterMetric;
   assetMetric: RosterMetric;
   groupMode: TradeGroupMode;
+  assets: AssetKey[];
   deactivatedExpanded: boolean;
   search: string;
   sort: SortState<SortKey>;
@@ -61,6 +64,7 @@ const DEFAULT_WORKSPACE: StoredWorkspace = {
   rosterMetric: "raw",
   assetMetric: "raw",
   groupMode: "window",
+  assets: [...ASSETS],
   deactivatedExpanded: false,
   search: "",
   sort: { key: "rawNet", direction: "desc" },
@@ -127,6 +131,9 @@ function readStoredWorkspace(): StoredWorkspace {
     const groupMode = ["window", "hour", "day"].includes(String(parsed.groupMode))
       ? (parsed.groupMode as TradeGroupMode)
       : DEFAULT_WORKSPACE.groupMode;
+    const assets = Array.isArray(parsed.assets)
+      ? ASSETS.filter((asset) => parsed.assets?.includes(asset))
+      : DEFAULT_WORKSPACE.assets;
     const sortDirection = parsed.sort?.direction === "asc" ? "asc" : "desc";
     const sortKey =
       typeof parsed.sort?.key === "string" ? parsed.sort.key : DEFAULT_WORKSPACE.sort.key;
@@ -137,6 +144,7 @@ function readStoredWorkspace(): StoredWorkspace {
       rosterMetric,
       assetMetric,
       groupMode,
+      assets: assets.length ? assets : DEFAULT_WORKSPACE.assets,
       deactivatedExpanded:
         typeof parsed.deactivatedExpanded === "boolean"
           ? parsed.deactivatedExpanded
@@ -180,6 +188,66 @@ function Toggle<T extends string | number>({
             {option.label}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function AssetSelector({
+  value,
+  onChange,
+}: {
+  value: readonly AssetKey[];
+  onChange: (assets: AssetKey[]) => void;
+}) {
+  const selected = new Set(value);
+  const allSelected = ASSETS.every((asset) => selected.has(asset));
+  const toggle = (asset: AssetKey) => {
+    const next = new Set(selected);
+    if (next.has(asset)) {
+      if (next.size === 1) return;
+      next.delete(asset);
+    } else {
+      next.add(asset);
+    }
+    onChange(ASSETS.filter((candidate) => next.has(candidate)));
+  };
+
+  return (
+    <div>
+      <div className="text-muted-foreground mb-1.5 text-[10px] font-medium uppercase tracking-[0.16em]">
+        Assets
+      </div>
+      <div className="bg-background inline-flex flex-wrap rounded-lg border p-0.5">
+        <button
+          type="button"
+          onClick={() => onChange([...ASSETS])}
+          className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            allSelected
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          All
+        </button>
+        {ASSETS.map((asset) => {
+          const active = selected.has(asset);
+          return (
+            <button
+              key={asset}
+              type="button"
+              aria-pressed={active}
+              onClick={() => toggle(asset)}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                active
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {asset}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -892,6 +960,7 @@ export function PolymarketUnder35PortfolioPage() {
   const [rosterMetric, setRosterMetric] = useState<RosterMetric>(initialWorkspace.rosterMetric);
   const [assetMetric, setAssetMetric] = useState<RosterMetric>(initialWorkspace.assetMetric);
   const [groupMode, setGroupMode] = useState<TradeGroupMode>(initialWorkspace.groupMode);
+  const [assets, setAssets] = useState<AssetKey[]>(initialWorkspace.assets);
   const [deactivatedExpanded, setDeactivatedExpanded] = useState(
     initialWorkspace.deactivatedExpanded,
   );
@@ -909,6 +978,7 @@ export function PolymarketUnder35PortfolioPage() {
         rosterMetric,
         assetMetric,
         groupMode,
+        assets,
         deactivatedExpanded,
         search,
         sort,
@@ -916,6 +986,7 @@ export function PolymarketUnder35PortfolioPage() {
     );
   }, [
     assetMetric,
+    assets,
     deactivatedExpanded,
     groupMode,
     horizon,
@@ -927,7 +998,7 @@ export function PolymarketUnder35PortfolioPage() {
   ]);
 
   const query = trpc.polymarket.under35Portfolio.useQuery(
-    { scope, horizon: "all", timezone: "America/Chicago" },
+    { scope, horizon: "all", timezone: "America/Chicago", assets },
     { staleTime: 30_000, refetchInterval: 60_000 },
   );
   const data = query.data;
@@ -942,7 +1013,7 @@ export function PolymarketUnder35PortfolioPage() {
   const selectedCohorts = horizonCohorts.filter((cohort) => selectedKeys.has(cohort.key));
   const historyCohortKeys = selectedCohorts.map((cohort) => cohort.key).sort();
   const historyQuery = trpc.polymarket.under35TradeHistory.useQuery(
-    { scope, timezone: "America/Chicago", cohortKeys: historyCohortKeys },
+    { scope, timezone: "America/Chicago", cohortKeys: historyCohortKeys, assets },
     {
       enabled: Boolean(data && historyCohortKeys.length),
       staleTime: 120_000,
@@ -1168,12 +1239,13 @@ export function PolymarketUnder35PortfolioPage() {
               { value: 50, label: "$50" },
             ]}
           />
+          <AssetSelector value={assets} onChange={setAssets} />
           <div className="text-muted-foreground ml-auto text-right text-xs leading-5">
             {data
               ? `${selectedCohorts.length} of ${horizonCohorts.length} cohorts included`
               : "Loading exact registered roster…"}
             <br />
-            America/Chicago · current day remains live
+            {assets.join(", ")} · America/Chicago · current day remains live
             {stakeUsd === 5 ? "" : ` · ${stakeMultiplier}× linear stake model`}
           </div>
         </div>

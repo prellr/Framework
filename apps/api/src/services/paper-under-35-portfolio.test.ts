@@ -40,6 +40,18 @@ test("under-35 evidence uses the recorded fee-adjusted ask and seven local dates
   );
 });
 
+test("under-35 portfolio and history accept one shared asset scope", () => {
+  assert.match(router, /under35Portfolio:[\s\S]*?assets:\s*z[\s\S]*?under35TradeHistory:/);
+  assert.match(router, /under35TradeHistory:[\s\S]*?assets:\s*z[\s\S]*?\.query/);
+  assert.match(
+    service,
+    /inArray\(\s*paperTrades\.pair,\s*input\.assets\.map\(\(asset\) => `\$\{asset\}-USD`\),?\s*\)/,
+  );
+  assert.match(page, /function AssetSelector/);
+  assert.match(page, /<AssetSelector value=\{assets\} onChange=\{setAssets\}/);
+  assert.match(page, /cohortKeys:\s*historyCohortKeys,\s*assets/);
+});
+
 test("under-35 trade history is bounded, graded, and carries exact decision evidence", () => {
   assert.match(router, /under35TradeHistory:\s*managerProcedure[\s\S]*?\.query/);
   assert.match(service, /TRADE_HISTORY_LIMIT\s*=\s*10_000/);
